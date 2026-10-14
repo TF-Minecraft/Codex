@@ -148,6 +148,34 @@ public class PlayerData {
         return playerDataCategory.getMillisActionsExecuted(discovery);
     }
 
+    /**
+     * Adds discoveries this character lacks, keeping its own entries. A category counts as completed
+     * when either side completed it, so completion rewards are not paid twice.
+     * @return how many discoveries were added
+     */
+    public int absorb(List<PlayerDataCategory> others){
+        int added = 0;
+        for(PlayerDataCategory other : others){
+            PlayerDataCategory own = getCategory(other.getName());
+            if(own == null){
+                own = new PlayerDataCategory(other.getName(),false,new ArrayList<>());
+                categories.add(own);
+            }
+            if(other.isCompleted()){
+                own.setCompleted(true);
+            }
+            for(PlayerDataDiscovery discovery : other.getDiscoveries()){
+                if(!own.hasDiscovery(discovery.getDiscoveryName())){
+                    own.addDiscovery(new PlayerDataDiscovery(discovery.getDiscoveryName(),
+                            discovery.getDiscoverDate(),discovery.getMillisActionsExecuted()));
+                    added++;
+                }
+            }
+        }
+        modified = true;
+        return added;
+    }
+
     public void resetData(){
         categories = new ArrayList<>();
         modified = true;

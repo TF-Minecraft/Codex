@@ -126,6 +126,63 @@ class CharacterJournalsTest {
     }
 
     @Test
+    void theMostPlayedCharacterGetsTheOldJournalOnceWhoeverLogsInFirst() throws IOException {
+        legacy("syrindell");
+        characters.when(() -> Characters.characters(owner)).thenReturn(Optional.of(List.of(
+                played(first, "Aldric", 9000), played(second, "Mira", 100))));
+
+        journals.onStart(start(second));
+
+        assertFalse(players.getPlayer(player).hasDiscovery("poi", "syrindell"));
+        assertTrue(store.load(owner, first, "Steve").hasDiscovery("poi", "syrindell"));
+        assertEquals(first, store.readLegacy(owner).seededTo());
+        assertEquals(List.of("Aldric"), journals.knowledge(player).other("poi", "syrindell").livingNames());
+        assertLogged(Level.INFO, "Copied 1 old Codex discoveries of account " + owner);
+
+        journals.onStart(start(first));
+        PlayerData aldric = players.getPlayer(player);
+        assertTrue(aldric.hasDiscovery("poi", "syrindell"));
+        aldric.resetDiscovery("poi", "syrindell");
+        journals.onStart(start(second));
+        assertFalse(store.load(owner, first, "Steve").hasDiscovery("poi", "syrindell"));
+    }
+
+    @Test
+    void theSeedGoesIntoAJournalStillWaitingToSave() throws IOException {
+        characters.when(() -> Characters.characters(owner)).thenReturn(Optional.of(List.of(
+                played(first, "Aldric", 9000), played(second, "Mira", 100))));
+        journals.onStart(start(first));
+        players.getPlayer(player).addDiscovery("poi", "vard", "14/10/2026");
+        Path characters = folder.resolve("characters");
+        Files.writeString(characters, "not a folder");
+        journals.onStart(start(second));
+        assertEquals(1, journals.unsavedJournals().size());
+        Files.delete(characters);
+        legacy("syrindell");
+
+        journals.onStart(start(second));
+
+        PlayerData aldric = store.load(owner, first, "Steve");
+        assertTrue(aldric.hasDiscovery("poi", "vard"));
+        assertTrue(aldric.hasDiscovery("poi", "syrindell"));
+        assertTrue(journals.unsavedJournals().isEmpty());
+    }
+
+    @Test
+    void noSeedWithoutARosterAndAFailedSeedIsRetried() throws IOException {
+        legacy("syrindell");
+        characters.when(() -> Characters.characters(owner)).thenReturn(Optional.empty());
+        journals.onStart(start(first));
+        assertNull(store.readLegacy(owner).seededTo());
+
+        characters.when(() -> Characters.characters(owner)).thenReturn(Optional.of(List.of(played(first, "Aldric", 10))));
+        Files.writeString(folder.resolve("characters"), "not a folder");
+        journals.onStart(start(first));
+        assertLogged(Level.SEVERE, "Could not copy the old Codex of account " + owner);
+        assertNull(store.readLegacy(owner).seededTo());
+    }
+
+    @Test
     void anUnreadableAccountJournalIsLeftOut() throws IOException {
         Files.createDirectories(folder.resolve("players"));
         Files.writeString(folder.resolve("players").resolve(owner + ".yml"), "name: [unclosed");
@@ -281,6 +338,10 @@ class CharacterJournalsTest {
 
         assertEquals(List.of("Mira"), journals.knowledge(player).other("poi", "aurea").livingNames());
         assertEquals("Aldric", journals.knowledge(player).characterName());
+    }
+
+    private CharacterInfo played(UUID character, String name, long seconds) {
+        return new CharacterInfo(new CharacterRef(owner, character), name, CharacterStatus.ALIVE, null, Set.of(), seconds, null);
     }
 
     private CharacterInfo info(UUID character, String name, CharacterStatus status) {

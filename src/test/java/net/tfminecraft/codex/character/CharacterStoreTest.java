@@ -128,6 +128,21 @@ class CharacterStoreTest {
         assertEquals("Steve", legacy.name());
         assertTrue(legacy.categories().get(0).isCompleted());
         assertTrue(legacy.categories().get(0).hasDiscovery("die"));
+        assertNull(legacy.seededTo());
+
+        store.markSeeded(owner, character);
+
+        CharacterStore.LegacyJournal seeded = store.readLegacy(owner);
+        assertEquals(character, seeded.seededTo());
+        assertTrue(seeded.categories().get(0).hasDiscovery("die"));
+        assertFalse(Files.exists(folder.resolve("players").resolve(owner + ".yml.tmp")));
+    }
+
+    @Test
+    void aGarbledSeedMarkerCountsAsNotSeeded() throws IOException {
+        write("players", owner, "seeded-to: nonsense\n");
+
+        assertNull(store.readLegacy(owner).seededTo());
     }
 
     @Test
