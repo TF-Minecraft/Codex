@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -35,13 +36,15 @@ public final class CharacterJournals implements Listener {
     private final PlayerDataManager players;
     private final CharacterStore store;
     private final Logger logger;
+    private final LegacyRecipient recipients;
     private final Map<UUID, AccountKnowledge> knowledge = new HashMap<>();
     /** Journals of characters no longer in play whose last save failed, by character; retried with every save. */
     private final Map<UUID, PlayerData> unsaved = new HashMap<>();
 
-    public CharacterJournals(PlayerDataManager players, CharacterStore store, Logger logger) {
+    public CharacterJournals(PlayerDataManager players, CharacterStore store, LegacyRecipient recipients, Logger logger) {
         this.players = players;
         this.store = store;
+        this.recipients = recipients;
         this.logger = logger;
     }
 
@@ -73,6 +76,7 @@ public final class CharacterJournals implements Listener {
 
     void open(Player player, CharacterRef ref) {
         close(player, null);
+        seed(ref.ownerId());
         try {
             PlayerData pending = unsaved.remove(ref.characterId());
             players.addPlayer(pending != null ? pending : store.load(ref.ownerId(), ref.characterId(), player.getName()));
@@ -80,6 +84,40 @@ public final class CharacterJournals implements Listener {
         } catch (IOException ex) {
             logger.log(Level.SEVERE, "Codex for character " + ref.characterId() + " of " + player.getName()
                     + " could not be read; nothing can be discovered until it is fixed", ex);
+        }
+    }
+
+    /**
+     * Once per account: copies its journal from before characters had their own into its most-played
+     * living character's journal, chosen at the account's first session after the change and pinned
+     * for good (see {@link LegacyRecipient}). The old file stays as out-of-character reference and
+     * records the copy; a retry after a failure goes to the same character and adds nothing twice.
+     */
+    void seed(UUID owner) {
+        if (!store.hasLegacy(owner)) {
+            return;
+        }
+        try {
+            CharacterStore.LegacyJournal legacy = store.readLegacy(owner);
+            if (legacy.seededTo() != null) {
+                return;
+            }
+            Optional<UUID> heir = recipients.of(owner, () -> MostPlayed.of(Characters.characters(owner)));
+            if (heir.isEmpty()) {
+                return;
+            }
+            PlayerData target = unsaved.containsKey(heir.get())
+                    ? unsaved.get(heir.get())
+                    : store.load(owner, heir.get(), legacy.name());
+            int added = target.absorb(legacy.categories());
+            store.save(target);
+            unsaved.remove(heir.get());
+            store.markSeeded(owner, heir.get());
+            logger.info("Copied " + added + " old Codex discoveries of account " + owner
+                    + " to its most-played character " + heir.get());
+        } catch (IOException | RuntimeException ex) {
+            logger.log(Level.SEVERE, "Could not copy the old Codex of account " + owner
+                    + " to its most-played character; trying again at its next session", ex);
         }
     }
 

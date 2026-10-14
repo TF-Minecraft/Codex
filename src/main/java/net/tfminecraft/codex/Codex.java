@@ -3,6 +3,7 @@ package net.tfminecraft.codex;
 import net.tfminecraft.codex.api.CodexAPI;
 import net.tfminecraft.codex.character.CharacterJournals;
 import net.tfminecraft.codex.character.CharacterStore;
+import net.tfminecraft.codex.character.LegacyRecipient;
 import net.tfminecraft.codex.api.ExpansionCodex;
 import net.tfminecraft.codex.commands.MainCommand;
 import net.tfminecraft.codex.config.ConfigsManager;
@@ -62,7 +63,8 @@ public class Codex extends JavaPlugin {
             return;
         }
 
-        characterJournals = new CharacterJournals(playerDataManager, new CharacterStore(getDataFolder().toPath()), getLogger());
+        characterJournals = new CharacterJournals(playerDataManager, new CharacterStore(getDataFolder().toPath()),
+                new LegacyRecipient(getDataFolder().getParentFile().toPath()), getLogger());
         registerEvents();
         registerCommands();
         characterJournals.start();

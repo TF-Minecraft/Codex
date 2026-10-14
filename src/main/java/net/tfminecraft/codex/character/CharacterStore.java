@@ -20,7 +20,8 @@ import net.tfminecraft.codex.model.data.PlayerDataDiscovery;
 /**
  * Discovery files. Each character has {@code characters/<character>.yml}. {@code players/<account>.yml}
  * holds what an account found before characters had their own; it stays as the account's
- * out-of-character reference and no character inherits it. Main thread only.
+ * out-of-character reference, and is copied once into its most-played character's journal
+ * ({@code seeded-to} records which). Main thread only.
  */
 public final class CharacterStore {
     public static final String CHARACTERS = "characters";
@@ -34,8 +35,11 @@ public final class CharacterStore {
         this.legacy = dataFolder.resolve(LEGACY);
     }
 
-    /** What an account found before characters had their own journals, with the account name it was saved under. */
-    public record LegacyJournal(String name, List<PlayerDataCategory> categories) {
+    /**
+     * What an account found before characters had their own journals, with the account name it was
+     * saved under and the character it was copied to, or null if not yet.
+     */
+    public record LegacyJournal(String name, List<PlayerDataCategory> categories, UUID seededTo) {
     }
 
     public Path characterFile(UUID characterId) {
@@ -78,7 +82,25 @@ public final class CharacterStore {
 
     public LegacyJournal readLegacy(UUID owner) throws IOException {
         YamlConfiguration yaml = read(legacyFile(owner));
-        return new LegacyJournal(yaml.getString("name"), categories(yaml));
+        return new LegacyJournal(yaml.getString("name"), categories(yaml), uuid(yaml.getString("seeded-to")));
+    }
+
+    /** Records in the account's old file that its discoveries were copied to the character. */
+    public void markSeeded(UUID owner, UUID character) throws IOException {
+        Path file = legacyFile(owner);
+        YamlConfiguration yaml = read(file);
+        yaml.set("seeded-to", character.toString());
+        Path temporary = legacy.resolve(owner + ".yml.tmp");
+        Files.writeString(temporary, yaml.saveToString(), StandardCharsets.UTF_8);
+        Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+    }
+
+    private static UUID uuid(String text) {
+        try {
+            return text == null ? null : UUID.fromString(text);
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
     }
 
     private Path legacyFile(UUID owner) {
