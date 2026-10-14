@@ -194,6 +194,34 @@ class CharacterJournalsTest {
     }
 
     @Test
+    void aJournalThatFailedToSaveIsKeptUntilItSaves() throws IOException {
+        characters.when(() -> Characters.characters(owner)).thenReturn(Optional.of(List.of(
+                info(first, "Aldric", CharacterStatus.ALIVE), info(second, "Mira", CharacterStatus.ALIVE))));
+        journals.onStart(start(first));
+        players.getPlayer(player).addDiscovery("poi", "vard", "14/10/2026");
+        Path characters = folder.resolve("characters");
+        Files.writeString(characters, "not a folder");
+
+        journals.onStart(start(second));
+
+        assertEquals(second, players.getPlayer(player).getCharacterId());
+        assertEquals(1, journals.unsavedJournals().size());
+        assertEquals(List.of("Aldric"), journals.knowledge(player).other("poi", "vard").livingNames());
+        journals.saveAll();
+        assertEquals(1, journals.unsavedJournals().size());
+
+        journals.onStart(start(first));
+        assertTrue(players.getPlayer(player).hasDiscovery("poi", "vard"));
+        assertEquals(List.of(second), journals.unsavedJournals().stream().map(PlayerData::getCharacterId).toList());
+
+        Files.delete(characters);
+        journals.saveAll();
+        assertTrue(journals.unsavedJournals().isEmpty());
+        assertTrue(store.load(owner, first, "Steve").hasDiscovery("poi", "vard"));
+        assertTrue(Files.exists(store.characterFile(second)));
+    }
+
+    @Test
     void startOpensCharactersAlreadyInPlayAndStopSaves() {
         characters.when(() -> Characters.currentSession(player))
                 .thenReturn(Optional.of(new CharacterSession(new CharacterRef(owner, second), 1)));

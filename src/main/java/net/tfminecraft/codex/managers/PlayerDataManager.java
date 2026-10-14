@@ -224,15 +224,17 @@ public class PlayerDataManager {
         // Offline characters are reset in their files, played characters in memory and saved later.
         plugin.getConfigsManager().getPlayersConfigManager().resetDataForAllPlayers(categoryName,discoveryName);
 
+        List<PlayerData> journals = new ArrayList<>(players.values());
+        journals.addAll(plugin.getCharacterJournals().unsavedJournals());
         String result;
         if(categoryName == null){
-            players.values().forEach(PlayerData::resetData);
+            journals.forEach(PlayerData::resetData);
             result = messagesConfig.getString("commandResetAllForAllPlayers");
         }else if(discoveryName == null){
-            players.values().forEach(p -> p.resetCategory(categoryName));
+            journals.forEach(p -> p.resetCategory(categoryName));
             result = messagesConfig.getString("commandResetCategoryForAllPlayers").replace("%category%",categoryName);
         }else{
-            players.values().forEach(p -> p.resetDiscovery(categoryName,discoveryName));
+            journals.forEach(p -> p.resetDiscovery(categoryName,discoveryName));
             result = messagesConfig.getString("commandResetDiscoveryForAllPlayers").replace("%category%",categoryName)
                     .replace("%discovery%",discoveryName);
         }

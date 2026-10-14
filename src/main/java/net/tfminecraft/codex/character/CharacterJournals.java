@@ -36,6 +36,8 @@ public final class CharacterJournals implements Listener {
     private final CharacterStore store;
     private final Logger logger;
     private final Map<UUID, AccountKnowledge> knowledge = new HashMap<>();
+    /** Journals of characters no longer in play whose last save failed, by character; retried with every save. */
+    private final Map<UUID, PlayerData> unsaved = new HashMap<>();
 
     public CharacterJournals(PlayerDataManager players, CharacterStore store, Logger logger) {
         this.players = players;
@@ -72,7 +74,8 @@ public final class CharacterJournals implements Listener {
     void open(Player player, CharacterRef ref) {
         close(player, null);
         try {
-            players.addPlayer(store.load(ref.ownerId(), ref.characterId(), player.getName()));
+            PlayerData pending = unsaved.remove(ref.characterId());
+            players.addPlayer(pending != null ? pending : store.load(ref.ownerId(), ref.characterId(), player.getName()));
             knowledge.put(ref.ownerId(), knowledgeOf(ref, player.getName()));
         } catch (IOException ex) {
             logger.log(Level.SEVERE, "Codex for character " + ref.characterId() + " of " + player.getName()
@@ -86,9 +89,16 @@ public final class CharacterJournals implements Listener {
         if (data == null || characterId != null && !characterId.equals(data.getCharacterId())) {
             return;
         }
-        save(data);
+        if (!save(data)) {
+            unsaved.put(data.getCharacterId(), data);
+        }
         players.removePlayer(data);
         knowledge.remove(player.getUniqueId());
+    }
+
+    /** Journals of characters out of play that still wait to be saved; staff resets apply to them too. */
+    public List<PlayerData> unsavedJournals() {
+        return List.copyOf(unsaved.values());
     }
 
     /** What the player's account knows beyond the played character, or null between characters. */
@@ -107,16 +117,21 @@ public final class CharacterJournals implements Listener {
         for (PlayerData data : new ArrayList<>(players.getPlayers().values())) {
             save(data);
         }
+        unsaved.values().removeIf(this::save);
     }
 
-    private void save(PlayerData data) {
+    /** Whether the journal is on disk; a failed save leaves it modified. */
+    private boolean save(PlayerData data) {
         if (!data.isModified()) {
-            return;
+            return true;
         }
         try {
             store.save(data);
+            return true;
         } catch (IOException ex) {
-            logger.log(Level.SEVERE, "Could not save Codex for character " + data.getCharacterId(), ex);
+            logger.log(Level.SEVERE, "Could not save Codex for character " + data.getCharacterId()
+                    + "; keeping it in memory and retrying with the next save", ex);
+            return false;
         }
     }
 
@@ -147,6 +162,8 @@ public final class CharacterJournals implements Listener {
             UUID id = info.ref().characterId();
             if (id.equals(ref.characterId())) {
                 name = info.name();
+            } else if (unsaved.containsKey(id)) {
+                builder.add(unsaved.get(id).getCategories(), info.name(), info.alive());
             } else if (Files.exists(store.characterFile(id))) {
                 try {
                     builder.add(store.load(ref.ownerId(), id, info.name()).getCategories(), info.name(), info.alive());

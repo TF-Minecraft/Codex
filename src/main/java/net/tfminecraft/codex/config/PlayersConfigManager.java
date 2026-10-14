@@ -24,7 +24,7 @@ public class PlayersConfigManager extends DataFolderConfigManager {
         plugin.getCharacterJournals().saveAll();
     }
 
-    /** Resets every character's file and every account file still waiting to move to its heir. */
+    /** Resets every character's file and every account's file from before journals were per character. */
     public void resetDataForAllPlayers(String categoryName,String discoveryName){
         ArrayList<CommonConfig> configs = getConfigs();
         configs.addAll(getConfigs(CharacterStore.LEGACY));
