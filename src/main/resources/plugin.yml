@@ -1,7 +1,7 @@
-main: cx.ajneb97.Codex
+main: net.tfminecraft.codex.Codex
 version: ${project.version}
 name: Codex
-api-version: 1.13
+api-version: '1.21.10'
 author: Ajneb97
 softdepend: [WorldGuard,WorldEdit,PlaceholderAPI,MythicMobs,Residence]
 

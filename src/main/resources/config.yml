@@ -1,6 +1,3 @@
-# Enables or disables the plugin update message when joining the server.
-update_notify: true
-
 # This option defines the time (in seconds) to automatically save
 # player data.
 player_data_save: 300
