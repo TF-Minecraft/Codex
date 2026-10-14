@@ -13,7 +13,6 @@ public class MainConfigManager {
     private Codex plugin;
     private CommonConfig configFile;
 
-    private boolean isMySQL;
     private String discoveriesDateFormat;
     private int playerDataSave;
     private String progressBarPlaceholderFillSymbol;
@@ -31,7 +30,6 @@ public class MainConfigManager {
 
     public void configure() {
         FileConfiguration config = configFile.getConfig();
-        isMySQL = config.getBoolean("mysql_database.enabled");
         discoveriesDateFormat = config.getString("discoveries_date_format");
         playerDataSave = config.getInt("player_data_save");
         progressBarPlaceholderFillSymbol = config.getString("progress_bar_placeholder.filled_symbol");
@@ -57,13 +55,6 @@ public class MainConfigManager {
                 getConfig().set("use_minimessage",false);
                 configFile.saveConfig();
             }
-            if(!text.contains("verifyServerCertificate:")){
-                getConfig().set("mysql_database.pool.connectionTimeout",5000);
-                getConfig().set("mysql_database.advanced.verifyServerCertificate",false);
-                getConfig().set("mysql_database.advanced.useSSL",true);
-                getConfig().set("mysql_database.advanced.allowPublicKeyRetrieval",true);
-                configFile.saveConfig();
-            }
         }catch(IOException e){
             e.printStackTrace();
         }
@@ -75,10 +66,6 @@ public class MainConfigManager {
 
     public FileConfiguration getConfig(){
         return configFile.getConfig();
-    }
-
-    public boolean isMySQL() {
-        return isMySQL;
     }
 
     public String getDiscoveriesDateFormat() {

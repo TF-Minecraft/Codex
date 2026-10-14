@@ -137,7 +137,8 @@ public class DiscoveryManager {
         Discovery discovery = category.getDiscovery(discoveryName);
 
         PlayerDataManager playerDataManager = plugin.getPlayerDataManager();
-        if(playerDataManager.hasDiscovery(player,categoryName,discoveryName)){
+        // Between characters there is no journal to record the find, so no rewards either.
+        if(!playerDataManager.isLoaded(player) || playerDataManager.hasDiscovery(player,categoryName,discoveryName)){
             return false;
         }
         playerDataManager.addDiscovery(player,categoryName,discoveryName);

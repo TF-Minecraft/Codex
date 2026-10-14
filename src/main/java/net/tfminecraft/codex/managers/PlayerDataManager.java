@@ -1,8 +1,6 @@
 package net.tfminecraft.codex.managers;
 
 import net.tfminecraft.codex.Codex;
-import net.tfminecraft.codex.config.PlayersConfigManager;
-import net.tfminecraft.codex.database.MySQLConnection;
 import net.tfminecraft.codex.model.data.PlayerData;
 import net.tfminecraft.codex.model.data.PlayerDataCategory;
 import net.tfminecraft.codex.model.data.PlayerDataDiscovery;
@@ -13,7 +11,6 @@ import net.tfminecraft.codex.utils.OtherUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.*;
 
@@ -38,20 +35,13 @@ public class PlayerDataManager {
         playerNames.put(p.getName(), p.getUuid());
     }
 
-    public PlayerData getPlayer(Player player, boolean create){
-        PlayerData playerData = players.get(player.getUniqueId());
-        if(playerData == null && create){
-            playerData = new PlayerData(player.getUniqueId(),player.getName());
-            addPlayer(playerData);
-        }
-        return playerData;
+    /** The journal of the character the player is playing, or null between characters. */
+    public PlayerData getPlayer(Player player){
+        return players.get(player.getUniqueId());
     }
 
-    private void updatePlayerName(String oldName,String newName,UUID uuid){
-        if(oldName != null){
-            playerNames.remove(oldName);
-        }
-        playerNames.put(newName,uuid);
+    public boolean isLoaded(Player player){
+        return players.containsKey(player.getUniqueId());
     }
 
     public PlayerData getPlayerByUUID(UUID uuid){
@@ -76,73 +66,19 @@ public class PlayerDataManager {
         players.remove(uuid);
     }
 
-    public void manageJoin(Player player){
-        if(plugin.getMySQLConnection() != null) {
-            MySQLConnection mySQLConnection = plugin.getMySQLConnection();
-            UUID uuid = player.getUniqueId();
-            mySQLConnection.getPlayer(uuid.toString(), playerData -> {
-                if (playerData != null) {
-                    addPlayer(playerData);
-                    //Update name if different
-                    if (!playerData.getName().equals(player.getName())) {
-                        updatePlayerName(playerData.getName(), player.getName(), player.getUniqueId());
-                        playerData.setName(player.getName());
-                        mySQLConnection.updatePlayerName(playerData);
-                    }
-                } else {
-                    playerData = new PlayerData(uuid, player.getName());
-                    addPlayer(playerData);
-                    //Create if it doesn't exist
-                    mySQLConnection.createPlayer(playerData);
-                }
-            });
-        }else{
-            // Load player data from file if exists
-            plugin.getConfigsManager().getPlayersConfigManager().loadConfig(player.getUniqueId(), playerData -> {
-                if(playerData != null){
-                    addPlayer(playerData);
-                    if(playerData.getName() == null || !playerData.getName().equals(player.getName())){
-                        updatePlayerName(playerData.getName(),player.getName(),player.getUniqueId());
-                        playerData.setName(player.getName());
-                        playerData.setModified(true);
-                    }
-                }
-            });
-        }
-    }
-
-    public void manageLeave(Player player){
-        // Save player data into file and remove from map
-        PlayerData playerData = getPlayer(player,false);
-        if(playerData != null){
-            if(plugin.getMySQLConnection() == null) {
-                if(playerData.isModified()){
-                    new BukkitRunnable(){
-                        @Override
-                        public void run() {
-                            plugin.getConfigsManager().getPlayersConfigManager().saveConfig(playerData);
-                        }
-                    }.runTaskAsynchronously(plugin);
-                }
-            }
-
-            removePlayer(playerData);
-        }
-    }
-
     public void addDiscovery(Player player,String categoryName,String discoveryName){
-        PlayerData playerData = getPlayer(player,true);
+        PlayerData playerData = getPlayer(player);
+        if(playerData == null){
+            return;
+        }
         playerData.setModified(true);
 
         String date = OtherUtils.getDate(plugin.getConfigsManager().getMainConfigManager().getDiscoveriesDateFormat());
         playerData.addDiscovery(categoryName,discoveryName,date);
-        if(plugin.getMySQLConnection() != null){
-            plugin.getMySQLConnection().addDiscovery(player.getUniqueId().toString(),categoryName,discoveryName,date);
-        }
     }
 
     public boolean hasDiscovery(Player player,String categoryName,String discoveryName){
-        PlayerData playerData = getPlayer(player,false);
+        PlayerData playerData = getPlayer(player);
         if(playerData == null){
             return false;
         }
@@ -150,7 +86,7 @@ public class PlayerDataManager {
     }
 
     public PlayerDataDiscovery getDiscovery(Player player,String categoryName,String discoveryName){
-        PlayerData playerData = getPlayer(player,false);
+        PlayerData playerData = getPlayer(player);
         if(playerData == null){
             return null;
         }
@@ -158,7 +94,7 @@ public class PlayerDataManager {
     }
 
     public int getTotalDiscoveries(Player player,String categoryName){
-        PlayerData playerData = getPlayer(player,false);
+        PlayerData playerData = getPlayer(player);
         if(playerData == null){
             return 0;
         }
@@ -166,7 +102,7 @@ public class PlayerDataManager {
     }
 
     public int getTotalDiscoveries(Player player){
-        PlayerData playerData = getPlayer(player,false);
+        PlayerData playerData = getPlayer(player);
         if(playerData == null){
             return 0;
         }
@@ -184,16 +120,16 @@ public class PlayerDataManager {
     }
 
     public void completeCategory(Player player,String categoryName){
-        PlayerData playerData = getPlayer(player,true);
-        playerData.completeCategory(categoryName);
-
-        if(plugin.getMySQLConnection() != null){
-            plugin.getMySQLConnection().updateCompletedCategories(player.getUniqueId().toString(),categoryName);
+        PlayerData playerData = getPlayer(player);
+        if(playerData == null){
+            return;
         }
+        playerData.setModified(true);
+        playerData.completeCategory(categoryName);
     }
 
     public boolean hasAllDiscoveries(Player player,String categoryName,int totalDiscoveries){
-        PlayerData playerData = getPlayer(player,false);
+        PlayerData playerData = getPlayer(player);
         if(playerData == null){
             return false;
         }
@@ -202,7 +138,7 @@ public class PlayerDataManager {
     }
 
     public List<PlayerDataCategory> getCategories(Player player){
-        PlayerData playerData = getPlayer(player,false);
+        PlayerData playerData = getPlayer(player);
         if(playerData == null){
             return new ArrayList<>();
         }
@@ -211,7 +147,7 @@ public class PlayerDataManager {
     }
 
     public boolean hasCompletedCategory(Player player,String categoryName){
-        PlayerData playerData = getPlayer(player,false);
+        PlayerData playerData = getPlayer(player);
         if(playerData == null){
             return false;
         }
@@ -227,17 +163,16 @@ public class PlayerDataManager {
     }
 
     public void setMillisActionsExecuted(Player player,String categoryName,String discoveryName){
-        PlayerData playerData = getPlayer(player,true);
+        PlayerData playerData = getPlayer(player);
+        if(playerData == null){
+            return;
+        }
         playerData.setModified(true);
         playerData.setMillisActionsExecuted(categoryName,discoveryName);
-
-        if(plugin.getMySQLConnection() != null){
-            plugin.getMySQLConnection().updateMillisActionsExecuted(player.getUniqueId().toString(),categoryName,discoveryName);
-        }
     }
 
     public long getMillisActionsExecuted(Player player,String categoryName,String discoveryName){
-        PlayerData playerData = getPlayer(player,false);
+        PlayerData playerData = getPlayer(player);
         if(playerData == null){
             return 0;
         }
@@ -266,68 +201,41 @@ public class PlayerDataManager {
             }
         }
 
-        MySQLConnection mySQLConnection = plugin.getMySQLConnection();
         if(categoryName == null){
             // Reset all data for player
             playerData.resetData();
-            if(mySQLConnection != null) mySQLConnection.resetDataPlayer(playerData.getUuid().toString(),null,null);
             return messagesConfig.getString("commandResetAllForPlayer").replace("%player%",playerName);
         }
 
         if(discoveryName == null){
             // Reset category for player
             playerData.resetCategory(categoryName);
-            if(mySQLConnection != null) mySQLConnection.resetDataPlayer(playerData.getUuid().toString(),categoryName,null);
             return messagesConfig.getString("commandResetCategoryForPlayer").replace("%player%",playerName)
                     .replace("%category%",categoryName);
         }else{
             // Reset discovery for player
             playerData.resetDiscovery(categoryName,discoveryName);
-            if(mySQLConnection != null) mySQLConnection.resetDataPlayer(playerData.getUuid().toString(),categoryName,discoveryName);
             return messagesConfig.getString("commandResetDiscoveryForPlayer").replace("%player%",playerName)
                     .replace("%category%",categoryName).replace("%discovery%",discoveryName);
         }
     }
 
     public void resetDataForAllPlayers(String categoryName, String discoveryName, FileConfiguration messagesConfig, GenericCallback<String> callback){
-        new BukkitRunnable(){
-            @Override
-            public void run() {
-                MySQLConnection mySQLConnection = plugin.getMySQLConnection();
-                if(mySQLConnection == null){
-                    PlayersConfigManager playersConfigsManager = plugin.getConfigsManager().getPlayersConfigManager();
-                    playersConfigsManager.resetDataForAllPlayers(categoryName,discoveryName);
-                }
+        // Offline characters are reset in their files, played characters in memory and saved later.
+        plugin.getConfigsManager().getPlayersConfigManager().resetDataForAllPlayers(categoryName,discoveryName);
 
-                new BukkitRunnable(){
-                    @Override
-                    public void run() {
-
-                        String result;
-                        if(categoryName == null){
-                            // Reset all data for all players (online and/or sql)
-                            players.values().forEach(PlayerData::resetData);
-                            if(mySQLConnection != null) mySQLConnection.resetDataPlayer("*",null,null);
-                            result = messagesConfig.getString("commandResetAllForAllPlayers");
-                        }else{
-                            if(discoveryName == null){
-                                // Reset category for all players (online and/or sql)
-                                players.values().forEach(p -> p.resetCategory(categoryName));
-                                if(mySQLConnection != null) mySQLConnection.resetDataPlayer("*",categoryName,null);
-                                result = messagesConfig.getString("commandResetCategoryForAllPlayers").replace("%category%",categoryName);
-                            }else{
-                                // Reset discovery for all players
-                                players.values().forEach(p -> p.resetDiscovery(categoryName,discoveryName));
-                                if(mySQLConnection != null) mySQLConnection.resetDataPlayer("*",categoryName,discoveryName);
-                                result = messagesConfig.getString("commandResetDiscoveryForAllPlayers").replace("%category%",categoryName)
-                                        .replace("%discovery%",discoveryName);
-                            }
-                        }
-
-                        callback.onDone(result);
-                    }
-                }.runTask(plugin);
-            }
-        }.runTaskAsynchronously(plugin);
+        String result;
+        if(categoryName == null){
+            players.values().forEach(PlayerData::resetData);
+            result = messagesConfig.getString("commandResetAllForAllPlayers");
+        }else if(discoveryName == null){
+            players.values().forEach(p -> p.resetCategory(categoryName));
+            result = messagesConfig.getString("commandResetCategoryForAllPlayers").replace("%category%",categoryName);
+        }else{
+            players.values().forEach(p -> p.resetDiscovery(categoryName,discoveryName));
+            result = messagesConfig.getString("commandResetDiscoveryForAllPlayers").replace("%category%",categoryName)
+                    .replace("%discovery%",discoveryName);
+        }
+        callback.onDone(result);
     }
 }

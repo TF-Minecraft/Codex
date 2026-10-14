@@ -29,7 +29,7 @@ public class PlayerDataSaveTask {
 				}
 			}
 			
-		}.runTaskTimerAsynchronously(plugin, 0L, ticks);
+		}.runTaskTimer(plugin, ticks, ticks);
 	}
 	
 	public void execute() {
