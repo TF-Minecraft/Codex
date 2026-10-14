@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -17,8 +16,6 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.plugin.Plugin;
-import org.bukkit.scheduler.BukkitTask;
 
 import net.tfminecraft.codex.managers.PlayerDataManager;
 import net.tfminecraft.codex.model.data.PlayerData;
@@ -31,15 +28,14 @@ import net.tfminecraft.tlibs.character.Characters;
 /**
  * Gives each character its own journal: loaded when a character session starts and saved when it
  * ends. Between characters a player has no journal, so nothing can be discovered. Alongside it sits
- * what the account's other characters know, so entries stay readable out of character. Main thread only.
+ * what the account knows from its other characters and from before journals were per character, so
+ * entries stay readable out of character. Main thread only.
  */
 public final class CharacterJournals implements Listener {
     private final PlayerDataManager players;
     private final CharacterStore store;
     private final Logger logger;
-    static final int WARN_AFTER_SECONDS = 60;
     private final Map<UUID, AccountKnowledge> knowledge = new HashMap<>();
-    private BukkitTask sweep;
 
     public CharacterJournals(PlayerDataManager players, CharacterStore store, Logger logger) {
         this.players = players;
@@ -47,28 +43,14 @@ public final class CharacterJournals implements Listener {
         this.logger = logger;
     }
 
-    /** Opens journals for characters already in play and moves old account files once heirs are known. */
-    public void start(Plugin plugin) {
+    /** Opens journals for characters already in play, for example when the plugin enables late. */
+    public void start() {
         for (Player player : Bukkit.getOnlinePlayers()) {
             Characters.currentSession(player).ifPresent(session -> open(player, session.ref()));
         }
-        int[] waited = {0};
-        sweep = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            if (Characters.legacyHeirsReady()) {
-                sweep.cancel();
-                migrateAll();
-                refreshKnowledge();
-            } else if (++waited[0] == WARN_AFTER_SECONDS) {
-                logger.warning("RPCharacters has not reported heirs after " + WARN_AFTER_SECONDS + " seconds; "
-                        + "account Codex files in players/ wait until character bodies are enabled");
-            }
-        }, 1L, 20L);
     }
 
     public void stop() {
-        if (sweep != null) {
-            sweep.cancel();
-        }
         saveAll();
     }
 
@@ -89,7 +71,6 @@ public final class CharacterJournals implements Listener {
 
     void open(Player player, CharacterRef ref) {
         close(player, null);
-        migrate(ref.ownerId());
         try {
             players.addPlayer(store.load(ref.ownerId(), ref.characterId(), player.getName()));
             knowledge.put(ref.ownerId(), knowledgeOf(ref, player.getName()));
@@ -110,45 +91,16 @@ public final class CharacterJournals implements Listener {
         knowledge.remove(player.getUniqueId());
     }
 
-    /** What the player's other characters know, or null between characters. */
+    /** What the player's account knows beyond the played character, or null between characters. */
     public AccountKnowledge knowledge(Player player) {
         return knowledge.get(player.getUniqueId());
     }
 
-    /** Rereads the other characters' journals, for example after staff reset them. */
+    /** Rereads the other journals, for example after staff reset them. */
     public void refreshKnowledge() {
         for (PlayerData data : players.getPlayers().values()) {
             knowledge.put(data.getUuid(), knowledgeOf(new CharacterRef(data.getUuid(), data.getCharacterId()), data.getName()));
         }
-    }
-
-    private AccountKnowledge knowledgeOf(CharacterRef ref, String fallbackName) {
-        try {
-            return readKnowledge(ref, fallbackName);
-        } catch (RuntimeException ex) {
-            logger.log(Level.WARNING, "Could not read the other characters of account " + ref.ownerId()
-                    + "; only this character's own Codex is shown", ex);
-            return AccountKnowledge.empty(fallbackName);
-        }
-    }
-
-    private AccountKnowledge readKnowledge(CharacterRef ref, String fallbackName) {
-        String name = fallbackName;
-        AccountKnowledge.Builder builder = new AccountKnowledge.Builder();
-        for (CharacterInfo info : Characters.characters(ref.ownerId()).orElse(List.of())) {
-            UUID id = info.ref().characterId();
-            if (id.equals(ref.characterId())) {
-                name = info.name();
-            } else if (Files.exists(store.characterFile(id))) {
-                try {
-                    builder.add(store.load(ref.ownerId(), id, info.name()).getCategories(), info.name(), info.alive());
-                } catch (IOException ex) {
-                    logger.log(Level.WARNING, "Codex for character " + id + " could not be read; "
-                            + "its discoveries are left out of its account's reference", ex);
-                }
-            }
-        }
-        return builder.build(name);
     }
 
     public void saveAll() {
@@ -168,49 +120,42 @@ public final class CharacterJournals implements Listener {
         }
     }
 
-    void migrateAll() {
-        List<UUID> owners;
+    private AccountKnowledge knowledgeOf(CharacterRef ref, String fallbackName) {
         try {
-            owners = store.legacyOwners();
-        } catch (IOException ex) {
-            logger.log(Level.SEVERE, "Could not list pre-character Codex files", ex);
-            return;
-        }
-        int moved = 0;
-        for (UUID owner : owners) {
-            if (migrate(owner)) {
-                moved++;
-            }
-        }
-        if (!owners.isEmpty()) {
-            logger.info("Moved " + moved + " of " + owners.size() + " account Codex files to characters; "
-                    + "the rest move when their account has a character");
+            return readKnowledge(ref, fallbackName);
+        } catch (RuntimeException ex) {
+            logger.log(Level.WARNING, "Could not read the other characters of account " + ref.ownerId()
+                    + "; only this character's own Codex is shown", ex);
+            return AccountKnowledge.empty(fallbackName);
         }
     }
 
-    /** Merges the account's old discoveries into its heir, then sets the old file aside. */
-    boolean migrate(UUID owner) {
-        if (!store.hasLegacy(owner)) {
-            return false;
-        }
-        Optional<UUID> heir = Heirs.of(owner);
-        if (heir.isEmpty()) {
-            return false;
-        }
-        try {
-            CharacterStore.LegacyJournal legacy = store.readLegacy(owner);
-            PlayerData target = players.getPlayerByUUID(owner);
-            if (target == null || !heir.get().equals(target.getCharacterId())) {
-                target = store.load(owner, heir.get(), legacy.name());
+    private AccountKnowledge readKnowledge(CharacterRef ref, String fallbackName) {
+        String name = fallbackName;
+        AccountKnowledge.Builder builder = new AccountKnowledge.Builder();
+        // What the account found before journals were per character: readable, but no character knows it.
+        if (store.hasLegacy(ref.ownerId())) {
+            try {
+                builder.add(store.readLegacy(ref.ownerId()).categories(), null, false);
+            } catch (IOException ex) {
+                logger.log(Level.WARNING, "The account Codex of " + ref.ownerId() + " could not be read; "
+                        + "its old discoveries are left out of its reference", ex);
             }
-            int added = target.absorb(legacy.categories());
-            store.save(target);
-            store.retireLegacy(owner);
-            logger.info("Moved " + added + " Codex discoveries of account " + owner + " to character " + heir.get());
-            return true;
-        } catch (IOException ex) {
-            logger.log(Level.SEVERE, "Could not move the Codex of account " + owner + " to its heir", ex);
-            return false;
         }
+        List<CharacterInfo> roster = Characters.characters(ref.ownerId()).orElse(List.of());
+        for (CharacterInfo info : roster) {
+            UUID id = info.ref().characterId();
+            if (id.equals(ref.characterId())) {
+                name = info.name();
+            } else if (Files.exists(store.characterFile(id))) {
+                try {
+                    builder.add(store.load(ref.ownerId(), id, info.name()).getCategories(), info.name(), info.alive());
+                } catch (IOException ex) {
+                    logger.log(Level.WARNING, "Codex for character " + id + " could not be read; "
+                            + "its discoveries are left out of its account's reference", ex);
+                }
+            }
+        }
+        return builder.build(name);
     }
 }

@@ -111,18 +111,7 @@ class CharacterStoreTest {
     }
 
     @Test
-    void legacyOwnersAreTheAccountFiles() throws IOException {
-        assertTrue(store.legacyOwners().isEmpty());
-
-        write("players", owner, "name: Steve\n");
-        Files.writeString(folder.resolve("players").resolve("notes.yml"), "x: 1\n");
-        Files.writeString(folder.resolve("players").resolve(UUID.randomUUID() + ".txt"), "x: 1\n");
-
-        assertEquals(List.of(owner), store.legacyOwners());
-    }
-
-    @Test
-    void legacyJournalIsReadThenRetired() throws IOException {
+    void legacyJournalIsReadInPlace() throws IOException {
         assertFalse(store.hasLegacy(owner));
         write("players", owner, """
                 name: Steve
@@ -132,7 +121,6 @@ class CharacterStoreTest {
                     discoveries:
                     - die;20/09/2026;0
                 """);
-        write("players-migrated", owner, "name: Older\n");
 
         CharacterStore.LegacyJournal legacy = store.readLegacy(owner);
 
@@ -140,16 +128,6 @@ class CharacterStoreTest {
         assertEquals("Steve", legacy.name());
         assertTrue(legacy.categories().get(0).isCompleted());
         assertTrue(legacy.categories().get(0).hasDiscovery("die"));
-
-        store.retireLegacy(owner);
-
-        assertFalse(store.hasLegacy(owner));
-        assertTrue(Files.readString(folder.resolve("players-migrated").resolve(owner + ".yml")).contains("Older"));
-        assertTrue(Files.readString(folder.resolve("players-migrated").resolve(owner + "-2.yml")).contains("Steve"));
-
-        write("players", owner, "name: Third\n");
-        store.retireLegacy(owner);
-        assertTrue(Files.readString(folder.resolve("players-migrated").resolve(owner + "-3.yml")).contains("Third"));
     }
 
     @Test

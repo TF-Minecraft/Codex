@@ -4,14 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
@@ -30,14 +25,10 @@ import java.util.logging.Logger;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.plugin.Plugin;
-import org.bukkit.scheduler.BukkitScheduler;
-import org.bukkit.scheduler.BukkitTask;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 
 import net.tfminecraft.codex.Codex;
@@ -68,8 +59,6 @@ class CharacterJournalsTest {
     @BeforeEach
     void setUp() {
         characters = mockStatic(Characters.class);
-        characters.when(Characters::legacyHeirsReady).thenReturn(true);
-        characters.when(() -> Characters.legacyHeir(owner)).thenReturn(Optional.of(new CharacterRef(owner, first)));
         players = new PlayerDataManager(mock(Codex.class));
         store = new CharacterStore(folder);
         Logger logger = Logger.getAnonymousLogger();
@@ -124,65 +113,27 @@ class CharacterJournalsTest {
     }
 
     @Test
-    void theHeirInheritsTheAccountJournalOnItsFirstSession() throws IOException {
+    void theAccountJournalIsReferenceOnlyAndStaysInPlace() throws IOException {
         legacy("syrindell");
 
-        journals.onStart(start(first));
-
-        assertTrue(players.getPlayer(player).hasDiscovery("poi", "syrindell"));
-        assertFalse(store.hasLegacy(owner));
-        assertTrue(Files.exists(folder.resolve("players-migrated").resolve(owner + ".yml")));
-    }
-
-    @Test
-    void otherCharactersStartWithoutTheAccountJournal() throws IOException {
-        legacy("syrindell");
-
-        journals.onStart(start(second));
-
-        assertFalse(players.getPlayer(player).hasDiscovery("poi", "syrindell"));
-        assertTrue(store.load(owner, first, "Steve").hasDiscovery("poi", "syrindell"));
-        assertTrue(Files.readString(store.characterFile(first)).contains("name: Steve"));
-    }
-
-    @Test
-    void anHeirAlreadyPlayingGetsTheDiscoveriesInMemory() throws IOException {
-        characters.when(Characters::legacyHeirsReady).thenReturn(false);
-        journals.onStart(start(first));
-        PlayerData live = players.getPlayer(player);
-        live.addDiscovery("poi", "vard", "14/10/2026");
-        legacy("syrindell");
-        characters.when(Characters::legacyHeirsReady).thenReturn(true);
-
-        assertTrue(journals.migrate(owner));
-
-        assertSame(live, players.getPlayer(player));
-        assertTrue(live.hasDiscovery("poi", "syrindell"));
-        assertTrue(live.hasDiscovery("poi", "vard"));
-        assertTrue(store.load(owner, first, "Steve").hasDiscovery("poi", "vard"));
-    }
-
-    @Test
-    void nothingMovesBeforeHeirsAreKnownOrWithoutAnOldFile() throws IOException {
-        assertFalse(journals.migrate(owner));
-
-        legacy("syrindell");
-        characters.when(Characters::legacyHeirsReady).thenReturn(false);
         journals.onStart(start(first));
 
         assertFalse(players.getPlayer(player).hasDiscovery("poi", "syrindell"));
+        AccountKnowledge.Known old = journals.knowledge(player).other("poi", "syrindell");
+        assertEquals("24/09/2026", old.date());
+        assertEquals(List.of(), old.livingNames());
         assertTrue(store.hasLegacy(owner));
     }
 
     @Test
-    void anUnreadableOldFileStaysForStaff() throws IOException {
+    void anUnreadableAccountJournalIsLeftOut() throws IOException {
         Files.createDirectories(folder.resolve("players"));
         Files.writeString(folder.resolve("players").resolve(owner + ".yml"), "name: [unclosed");
 
-        assertFalse(journals.migrate(owner));
+        journals.onStart(start(first));
 
-        assertTrue(store.hasLegacy(owner));
-        assertLogged(Level.SEVERE, "Could not move the Codex of account " + owner);
+        assertNotNull(players.getPlayer(player));
+        assertLogged(Level.WARNING, "The account Codex of " + owner + " could not be read");
     }
 
     @Test
@@ -206,11 +157,12 @@ class CharacterJournalsTest {
 
         journals.onEnd(end(first));
         assertNull(players.getPlayer(player));
+        assertNull(journals.knowledge(player));
         assertTrue(store.load(owner, first, "Steve").hasDiscovery("poi", "vard"));
     }
 
     @Test
-    void quittingSavesAndClosesAnyJournal() throws IOException {
+    void quittingSavesAndClosesAnyJournal() {
         journals.onQuit(new PlayerQuitEvent(player, "bye"));
         journals.onStart(start(first));
 
@@ -242,71 +194,18 @@ class CharacterJournalsTest {
     }
 
     @Test
-    void startOpensPlayedCharactersThenMovesOldFilesWhenHeirsAreKnown() throws IOException {
-        legacy("syrindell");
-        UUID other = UUID.randomUUID();
-        Files.writeString(folder.resolve("players").resolve(other + ".yml"), "name: Alex\n");
-        characters.when(() -> Characters.characters(other)).thenReturn(Optional.of(List.of()));
+    void startOpensCharactersAlreadyInPlayAndStopSaves() {
         characters.when(() -> Characters.currentSession(player))
                 .thenReturn(Optional.of(new CharacterSession(new CharacterRef(owner, second), 1)));
-        characters.when(Characters::legacyHeirsReady).thenReturn(false);
-        Plugin plugin = mock(Plugin.class);
-        BukkitScheduler scheduler = mock(BukkitScheduler.class);
-        BukkitTask task = mock(BukkitTask.class);
-        ArgumentCaptor<Runnable> tick = ArgumentCaptor.forClass(Runnable.class);
-        when(scheduler.runTaskTimer(eq(plugin), tick.capture(), anyLong(), anyLong())).thenReturn(task);
         try (MockedStatic<Bukkit> bukkit = mockStatic(Bukkit.class)) {
             bukkit.when(Bukkit::getOnlinePlayers).thenReturn(List.of(player));
-            bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
 
-            journals.start(plugin);
-            assertEquals(second, players.getPlayer(player).getCharacterId());
-
-            tick.getValue().run();
-            verify(task, never()).cancel();
-            assertTrue(store.hasLegacy(owner));
-
-            for (int second = 1; second < CharacterJournals.WARN_AFTER_SECONDS; second++) {
-                tick.getValue().run();
-            }
-            assertLogged(Level.WARNING, "has not reported heirs after 60 seconds");
-            tick.getValue().run();
-
-            characters.when(Characters::legacyHeirsReady).thenReturn(true);
-            tick.getValue().run();
+            journals.start();
         }
-
-        verify(task).cancel();
-        assertFalse(store.hasLegacy(owner));
-        assertTrue(store.hasLegacy(other));
-        assertLogged(Level.INFO, "Moved 1 of 2 account Codex files");
+        assertEquals(second, players.getPlayer(player).getCharacterId());
 
         journals.stop();
         assertTrue(Files.exists(store.characterFile(second)));
-    }
-
-    @Test
-    void stopWithoutStartStillSaves() {
-        journals.onStart(start(first));
-
-        journals.stop();
-
-        assertTrue(Files.exists(store.characterFile(first)));
-    }
-
-    @Test
-    void anEmptyOrUnlistableOldFolderIsHandled() throws IOException {
-        journals.migrateAll();
-        assertTrue(logs.isEmpty());
-
-        Path old = Files.createDirectories(folder.resolve("players"));
-        assertTrue(old.toFile().setReadable(false));
-        try {
-            journals.migrateAll();
-        } finally {
-            old.toFile().setReadable(true);
-        }
-        assertLogged(Level.SEVERE, "Could not list pre-character Codex files");
     }
 
     @Test
@@ -329,9 +228,6 @@ class CharacterJournalsTest {
         assertEquals(List.of("Mira"), knowledge.other("poi", "aurea").livingNames());
         assertEquals(List.of(), knowledge.other("poi", "vard").livingNames());
         assertLogged(Level.WARNING, "Codex for character " + broken + " could not be read");
-
-        journals.onEnd(end(first));
-        assertNull(journals.knowledge(player));
     }
 
     @Test
@@ -343,15 +239,6 @@ class CharacterJournalsTest {
         assertNotNull(players.getPlayer(player));
         assertEquals("Steve", journals.knowledge(player).characterName());
         assertLogged(Level.WARNING, "Could not read the other characters of account " + owner);
-    }
-
-    @Test
-    void anUnknownRosterLeavesOnlyThePlayedCharacter() {
-        characters.when(() -> Characters.characters(owner)).thenReturn(Optional.empty());
-
-        journals.onStart(start(first));
-
-        assertEquals("Steve", journals.knowledge(player).characterName());
     }
 
     @Test

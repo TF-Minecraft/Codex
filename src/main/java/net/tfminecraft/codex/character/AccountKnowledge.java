@@ -10,13 +10,13 @@ import net.tfminecraft.codex.model.data.PlayerDataCategory;
 import net.tfminecraft.codex.model.data.PlayerDataDiscovery;
 
 /**
- * What the account's other characters have discovered, read when a character's session starts.
- * An entry any character found, alive or dead, stays readable for out-of-character reference;
- * only living characters can use it in character. The played character's own journal is live,
- * so it is checked separately.
+ * What the account knows beyond the played character, read when a character's session starts: its
+ * other characters' journals and its journal from before characters had their own. Every such entry
+ * stays readable for out-of-character reference; only living characters who found it themselves can
+ * use it in character. The played character's own journal is live, so it is checked separately.
  */
 public final class AccountKnowledge {
-    /** A discovery made by other characters: a date one of them found it, and which living ones know it. */
+    /** A discovery known elsewhere on the account: a date it was found, and which living characters know it. */
     public record Known(String date, List<String> livingNames) {
     }
 
@@ -58,7 +58,7 @@ public final class AccountKnowledge {
         return category + ":" + discovery;
     }
 
-    /** Collects other characters' journals. Each is added once; dead characters count but are not named. */
+    /** Collects journals. Each is added once; dead characters and the old account journal count but are not named. */
     static final class Builder {
         private final Map<String, String> dates = new HashMap<>();
         private final Map<String, List<String>> names = new HashMap<>();

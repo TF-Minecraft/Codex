@@ -2,7 +2,6 @@ package net.tfminecraft.codex.character;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -19,26 +18,23 @@ import net.tfminecraft.codex.model.data.PlayerDataCategory;
 import net.tfminecraft.codex.model.data.PlayerDataDiscovery;
 
 /**
- * Discovery files. Each character has {@code characters/<character>.yml}; {@code players/<account>.yml}
- * holds what an account found before characters had their own, until it moves to the account's heir
- * and the old file goes to {@code players-migrated/}. Main thread only.
+ * Discovery files. Each character has {@code characters/<character>.yml}. {@code players/<account>.yml}
+ * holds what an account found before characters had their own; it stays as the account's
+ * out-of-character reference and no character inherits it. Main thread only.
  */
 public final class CharacterStore {
     public static final String CHARACTERS = "characters";
     public static final String LEGACY = "players";
-    static final String MIGRATED = "players-migrated";
 
     private final Path characters;
     private final Path legacy;
-    private final Path migrated;
 
     public CharacterStore(Path dataFolder) {
         this.characters = dataFolder.resolve(CHARACTERS);
         this.legacy = dataFolder.resolve(LEGACY);
-        this.migrated = dataFolder.resolve(MIGRATED);
     }
 
-    /** What an account found before characters, with the account name it was saved under. */
+    /** What an account found before characters had their own journals, with the account name it was saved under. */
     public record LegacyJournal(String name, List<PlayerDataCategory> categories) {
     }
 
@@ -76,25 +72,6 @@ public final class CharacterStore {
         data.setModified(false);
     }
 
-    /** Accounts with a pre-character file still waiting to move. Files not named by a UUID are left alone. */
-    public List<UUID> legacyOwners() throws IOException {
-        List<UUID> owners = new ArrayList<>();
-        if (!Files.isDirectory(legacy)) {
-            return owners;
-        }
-        try (DirectoryStream<Path> files = Files.newDirectoryStream(legacy, "*.yml")) {
-            for (Path file : files) {
-                String stem = file.getFileName().toString();
-                try {
-                    owners.add(UUID.fromString(stem.substring(0, stem.length() - ".yml".length())));
-                } catch (IllegalArgumentException notAccount) {
-                    // Not an account file.
-                }
-            }
-        }
-        return owners;
-    }
-
     public boolean hasLegacy(UUID owner) {
         return Files.isRegularFile(legacyFile(owner));
     }
@@ -102,16 +79,6 @@ public final class CharacterStore {
     public LegacyJournal readLegacy(UUID owner) throws IOException {
         YamlConfiguration yaml = read(legacyFile(owner));
         return new LegacyJournal(yaml.getString("name"), categories(yaml));
-    }
-
-    /** Moves the account's old file aside once its discoveries belong to a character. */
-    public void retireLegacy(UUID owner) throws IOException {
-        Files.createDirectories(migrated);
-        Path target = migrated.resolve(owner + ".yml");
-        for (int copy = 2; Files.exists(target); copy++) {
-            target = migrated.resolve(owner + "-" + copy + ".yml");
-        }
-        Files.move(legacyFile(owner), target);
     }
 
     private Path legacyFile(UUID owner) {

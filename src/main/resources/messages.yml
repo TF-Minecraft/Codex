@@ -26,7 +26,7 @@ commandDoesNotExist: "&cThat command doesn't exist."
 pluginCriticalErrors: "&cThe plugin has detected some errors. Check them using &7/codex verify"
 clickActionsCooldown: "&cYou must wait &7%time% &cbefore using this item again."
 knownInCharacterBy: "&7%characters% can use this in character."
-knownInCharacterByNobody: "&7No living character can use this in character."
+knownInCharacterByNobody: "&7No character can use this in character."
 knownOutOfCharacterOnly: "&8&o%character% knows this only out of character."
 noCharacterInPlay: "&cChoose a character to open the Codex."
 seconds: s

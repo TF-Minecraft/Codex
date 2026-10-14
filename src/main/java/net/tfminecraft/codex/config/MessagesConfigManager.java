@@ -11,7 +11,7 @@ import java.nio.file.Paths;
 
 public class MessagesConfigManager {
     public static final String KNOWN_BY = "&7%characters% can use this in character.";
-    public static final String KNOWN_BY_NOBODY = "&7No living character can use this in character.";
+    public static final String KNOWN_BY_NOBODY = "&7No character can use this in character.";
     public static final String OUT_OF_CHARACTER_ONLY = "&8&o%character% knows this only out of character.";
     public static final String NO_CHARACTER_IN_PLAY = "&cChoose a character to open the Codex.";
 
