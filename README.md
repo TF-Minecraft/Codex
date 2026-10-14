@@ -1,19 +1,24 @@
 # Codex
 
-Minecraft Plugin allows you to create a "Discoveries Inventory" where your players can access information about specific regions, people, monsters they've encountered. Codex is a plugin that adds a little bit of RPG experience to your Minecraft server, by providing context and lore to the player.
+> Lore discoveries for TF-Minecraft, maintained from [Ajneb97/Codex](https://github.com/Ajneb97/Codex).
 
-You can create any "Discovery" you want, players will unlock them by entering regions for the first time, talking to NPCs, killing monsters, and you can even unlock discoveries to players by using a console command! So the plugin allows you to create discoveries associated with aspects of other plugins.
+Codex gives players a journal of discoveries: places they enter, creatures they
+kill and lore that commands unlock. `/codex` opens the journal, and each entry
+shows its text once it has been found. This copy tracks upstream 2.12.1 and builds
+for Paper 1.21.10. It has no update checker or bStats reporting.
 
-For example, you can create a Region Discovery which will be unlocked if the player arrives at certain city. The player has the possibility to access the Codex by using /codex and read the lore of this city which provides more information.
+## Documentation
 
-**Spigot / Paper 1.16.5+**
+[Project documentation](https://github.com/TF-Minecraft/Docs/blob/main/projects/Codex/README.md)
 
-## Download Links
-- [SpigotMC](https://www.spigotmc.org/resources/codex-rpg-discoveries-1-16-5-26-2.90371/)
-- [Modrinth](https://modrinth.com/plugin/codex-rpg-discoveries)
+The upstream [Codex wiki](https://ajneb97.gitbook.io/codex) covers categories,
+discoveries, actions and placeholders.
 
+## Tests
 
-## Other Links
-- [Wiki](https://ajneb97.gitbook.io/codex)
-- [bStats](https://bstats.org/plugin/bukkit/Codex/24230)
-- [Support me on Ko-fi](https://ko-fi.com/ajneb97)
+With Java 21, run `mvn clean verify`.
+
+## License
+
+[MIT](LICENSE), copyright Ajneb97. TF-Minecraft changes are released under the
+same license.
