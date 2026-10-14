@@ -1,7 +1,10 @@
 package net.tfminecraft.codex.managers;
 
 import net.tfminecraft.codex.Codex;
+import net.tfminecraft.codex.character.AccountKnowledge;
+import net.tfminecraft.codex.config.MessagesConfigManager;
 import net.tfminecraft.codex.config.MainConfigManager;
+import net.tfminecraft.codex.model.data.PlayerData;
 import net.tfminecraft.codex.model.data.PlayerDataDiscovery;
 import net.tfminecraft.codex.model.internal.CommonVariable;
 import net.tfminecraft.codex.model.inventory.CommonInventory;
@@ -148,9 +151,8 @@ public class InventoryManager {
 
         Player player = inventoryPlayer.getPlayer();
         PlayerDataManager playerDataManager = plugin.getPlayerDataManager();
-        boolean hasDiscovered = playerDataManager.hasDiscovery(player,category.getName(),discoveryName);
-
-        if(!hasDiscovered){
+        // Entries any of the account's characters found stay readable, sub-pages included.
+        if(!isSeen(player,category.getName(),discoveryName)){
             return;
         }
 
@@ -280,13 +282,16 @@ public class InventoryManager {
 
         CommonItem commonItem;
         variables.add(new CommonVariable("%name%",discovery.getName()));
-        if(playerDataDiscovery != null){
+        AccountKnowledge knowledge = plugin.getCharacterJournals().knowledge(player);
+        AccountKnowledge.Known other = knowledge == null ? null : knowledge.other(category.getName(),discoveryName);
+        boolean seen = playerDataDiscovery != null || other != null;
+        if(seen){
             if(discovery.getCustomLevelUnlockedItem() != null){
                 commonItem = discovery.getCustomLevelUnlockedItem();
             }else{
                 commonItem = category.getDefaultLevelUnlockedItem();
             }
-            variables.add(new CommonVariable("%date%",playerDataDiscovery.getDiscoverDate()));
+            variables.add(new CommonVariable("%date%",playerDataDiscovery != null ? playerDataDiscovery.getDiscoverDate() : other.date()));
         }else{
             if(discovery.getCustomLevelBlockedItem() != null){
                 commonItem = discovery.getCustomLevelBlockedItem();
@@ -308,6 +313,9 @@ public class InventoryManager {
                 newLore.add(s);
             }
         }
+        if(seen && knowledge != null){
+            newLore.addAll(inCharacterLore(knowledge,playerDataManager.getPlayer(player),category.getName(),discoveryName));
+        }
         commonItem.setLore(newLore);
 
         commonItemManager.replaceVariables(commonItem,variables,player);
@@ -315,5 +323,32 @@ public class InventoryManager {
 
         item = ItemUtils.setTagStringItem(plugin,item,"codex_discovery",discoveryName);
         return item;
+    }
+
+    private boolean isSeen(Player player,String categoryName,String discoveryName){
+        if(plugin.getPlayerDataManager().hasDiscovery(player,categoryName,discoveryName)){
+            return true;
+        }
+        AccountKnowledge knowledge = plugin.getCharacterJournals().knowledge(player);
+        return knowledge != null && knowledge.other(categoryName,discoveryName) != null;
+    }
+
+    /** Hover lines saying which living characters can use the entry in character. */
+    private List<String> inCharacterLore(AccountKnowledge knowledge,PlayerData current,String categoryName,String discoveryName){
+        FileConfiguration messages = plugin.getMessagesConfig();
+        List<String> lines = new ArrayList<>();
+        lines.add("");
+        List<String> names = knowledge.knownInCharacterBy(current,categoryName,discoveryName);
+        if(names.isEmpty()){
+            lines.add(messages.getString("knownInCharacterByNobody",MessagesConfigManager.KNOWN_BY_NOBODY));
+        }else{
+            lines.add(messages.getString("knownInCharacterBy",MessagesConfigManager.KNOWN_BY)
+                    .replace("%characters%",OtherUtils.joinNames(names)));
+        }
+        if(current == null || !current.hasDiscovery(categoryName,discoveryName)){
+            lines.add(messages.getString("knownOutOfCharacterOnly",MessagesConfigManager.OUT_OF_CHARACTER_ONLY)
+                    .replace("%character%",knowledge.characterName()));
+        }
+        return lines;
     }
 }

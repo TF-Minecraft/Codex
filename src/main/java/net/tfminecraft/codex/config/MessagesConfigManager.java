@@ -10,6 +10,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 public class MessagesConfigManager {
+    public static final String KNOWN_BY = "&7%characters% can use this in character.";
+    public static final String KNOWN_BY_NOBODY = "&7No living character can use this in character.";
+    public static final String OUT_OF_CHARACTER_ONLY = "&8&o%character% knows this only out of character.";
+
 
     private Codex plugin;
     private CommonConfig configFile;
@@ -52,6 +56,12 @@ public class MessagesConfigManager {
             String text = new String(Files.readAllBytes(pathConfig));
             FileConfiguration config = configFile.getConfig();
 
+            if(!text.contains("knownInCharacterBy:")){
+                config.set("knownInCharacterBy",KNOWN_BY);
+                config.set("knownInCharacterByNobody",KNOWN_BY_NOBODY);
+                config.set("knownOutOfCharacterOnly",OUT_OF_CHARACTER_ONLY);
+                configFile.saveConfig();
+            }
             if(!text.contains("clickActionsCooldown:")){
                 config.set("clickActionsCooldown","&cYou must wait &7%time% &cbefore using this item again.");
                 config.set("seconds","s");

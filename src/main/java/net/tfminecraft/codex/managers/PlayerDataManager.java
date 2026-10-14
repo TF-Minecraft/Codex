@@ -236,6 +236,7 @@ public class PlayerDataManager {
             result = messagesConfig.getString("commandResetDiscoveryForAllPlayers").replace("%category%",categoryName)
                     .replace("%discovery%",discoveryName);
         }
+        plugin.getCharacterJournals().refreshKnowledge();
         callback.onDone(result);
     }
 }

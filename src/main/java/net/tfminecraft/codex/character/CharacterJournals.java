@@ -1,8 +1,11 @@
 package net.tfminecraft.codex.character;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.logging.Level;
@@ -19,6 +22,7 @@ import org.bukkit.scheduler.BukkitTask;
 
 import net.tfminecraft.codex.managers.PlayerDataManager;
 import net.tfminecraft.codex.model.data.PlayerData;
+import net.tfminecraft.tlibs.character.CharacterInfo;
 import net.tfminecraft.tlibs.character.CharacterRef;
 import net.tfminecraft.tlibs.character.CharacterSessionEndEvent;
 import net.tfminecraft.tlibs.character.CharacterSessionStartEvent;
@@ -26,12 +30,14 @@ import net.tfminecraft.tlibs.character.Characters;
 
 /**
  * Gives each character its own journal: loaded when a character session starts and saved when it
- * ends. Between characters a player has no journal, so nothing can be discovered. Main thread only.
+ * ends. Between characters a player has no journal, so nothing can be discovered. Alongside it sits
+ * what the account's other characters know, so entries stay readable out of character. Main thread only.
  */
 public final class CharacterJournals implements Listener {
     private final PlayerDataManager players;
     private final CharacterStore store;
     private final Logger logger;
+    private final Map<UUID, AccountKnowledge> knowledge = new HashMap<>();
     private BukkitTask sweep;
 
     public CharacterJournals(PlayerDataManager players, CharacterStore store, Logger logger) {
@@ -80,6 +86,7 @@ public final class CharacterJournals implements Listener {
         migrate(ref.ownerId());
         try {
             players.addPlayer(store.load(ref.ownerId(), ref.characterId(), player.getName()));
+            knowledge.put(ref.ownerId(), knowledgeOf(ref, player.getName()));
         } catch (IOException ex) {
             logger.log(Level.SEVERE, "Codex for character " + ref.characterId() + " of " + player.getName()
                     + " could not be read; nothing can be discovered until it is fixed", ex);
@@ -94,6 +101,38 @@ public final class CharacterJournals implements Listener {
         }
         save(data);
         players.removePlayer(data);
+        knowledge.remove(player.getUniqueId());
+    }
+
+    /** What the player's other characters know, or null between characters. */
+    public AccountKnowledge knowledge(Player player) {
+        return knowledge.get(player.getUniqueId());
+    }
+
+    /** Rereads the other characters' journals, for example after staff reset them. */
+    public void refreshKnowledge() {
+        for (PlayerData data : players.getPlayers().values()) {
+            knowledge.put(data.getUuid(), knowledgeOf(new CharacterRef(data.getUuid(), data.getCharacterId()), data.getName()));
+        }
+    }
+
+    private AccountKnowledge knowledgeOf(CharacterRef ref, String fallbackName) {
+        String name = fallbackName;
+        AccountKnowledge.Builder builder = new AccountKnowledge.Builder();
+        for (CharacterInfo info : Characters.characters(ref.ownerId()).orElse(List.of())) {
+            UUID id = info.ref().characterId();
+            if (id.equals(ref.characterId())) {
+                name = info.name();
+            } else if (Files.exists(store.characterFile(id))) {
+                try {
+                    builder.add(store.load(ref.ownerId(), id, info.name()).getCategories(), info.name(), info.alive());
+                } catch (IOException ex) {
+                    logger.log(Level.WARNING, "Codex for character " + id + " could not be read; "
+                            + "its discoveries are left out of its account's reference", ex);
+                }
+            }
+        }
+        return builder.build(name);
     }
 
     public void saveAll() {

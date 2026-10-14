@@ -20,6 +20,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Handler;
 import java.util.logging.Level;
@@ -42,10 +43,12 @@ import org.mockito.MockedStatic;
 import net.tfminecraft.codex.Codex;
 import net.tfminecraft.codex.managers.PlayerDataManager;
 import net.tfminecraft.codex.model.data.PlayerData;
+import net.tfminecraft.tlibs.character.CharacterInfo;
 import net.tfminecraft.tlibs.character.CharacterRef;
 import net.tfminecraft.tlibs.character.CharacterSession;
 import net.tfminecraft.tlibs.character.CharacterSessionEndEvent;
 import net.tfminecraft.tlibs.character.CharacterSessionStartEvent;
+import net.tfminecraft.tlibs.character.CharacterStatus;
 import net.tfminecraft.tlibs.character.Characters;
 
 class CharacterJournalsTest {
@@ -298,6 +301,58 @@ class CharacterJournalsTest {
             old.toFile().setReadable(true);
         }
         assertLogged(Level.SEVERE, "Could not list pre-character Codex files");
+    }
+
+    @Test
+    void otherCharactersDiscoveriesStayReadable() throws IOException {
+        UUID dead = UUID.randomUUID();
+        UUID unplayed = UUID.randomUUID();
+        UUID broken = UUID.randomUUID();
+        saved(second, "aurea");
+        saved(dead, "vard");
+        Files.writeString(store.characterFile(broken), "categories: [unclosed");
+        characters.when(() -> Characters.characters(owner)).thenReturn(Optional.of(List.of(
+                info(first, "Aldric", CharacterStatus.ALIVE), info(second, "Mira", CharacterStatus.ALIVE),
+                info(dead, "Old Tom", CharacterStatus.DEAD), info(unplayed, "Hazel", CharacterStatus.ALIVE),
+                info(broken, "Bram", CharacterStatus.ALIVE))));
+
+        journals.onStart(start(first));
+
+        AccountKnowledge knowledge = journals.knowledge(player);
+        assertEquals("Aldric", knowledge.characterName());
+        assertEquals(List.of("Mira"), knowledge.other("poi", "aurea").livingNames());
+        assertEquals(List.of(), knowledge.other("poi", "vard").livingNames());
+        assertLogged(Level.WARNING, "Codex for character " + broken + " could not be read");
+
+        journals.onEnd(end(first));
+        assertNull(journals.knowledge(player));
+    }
+
+    @Test
+    void anUnknownRosterLeavesOnlyThePlayedCharacter() {
+        characters.when(() -> Characters.characters(owner)).thenReturn(Optional.empty());
+
+        journals.onStart(start(first));
+
+        assertEquals("Steve", journals.knowledge(player).characterName());
+    }
+
+    @Test
+    void refreshingRereadsOtherCharacters() throws IOException {
+        characters.when(() -> Characters.characters(owner)).thenReturn(Optional.of(List.of(
+                info(first, "Aldric", CharacterStatus.ALIVE), info(second, "Mira", CharacterStatus.ALIVE))));
+        journals.onStart(start(first));
+        assertNull(journals.knowledge(player).other("poi", "aurea"));
+
+        saved(second, "aurea");
+        journals.refreshKnowledge();
+
+        assertEquals(List.of("Mira"), journals.knowledge(player).other("poi", "aurea").livingNames());
+        assertEquals("Aldric", journals.knowledge(player).characterName());
+    }
+
+    private CharacterInfo info(UUID character, String name, CharacterStatus status) {
+        return new CharacterInfo(new CharacterRef(owner, character), name, status, null, Set.of(), 0, null);
     }
 
     private CharacterSessionStartEvent start(UUID character) {
