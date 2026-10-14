@@ -1,18 +1,14 @@
 package net.tfminecraft.codex.config;
 
 import net.tfminecraft.codex.Codex;
-import net.tfminecraft.codex.model.data.PlayerData;
-import net.tfminecraft.codex.model.data.PlayerDataCategory;
-import net.tfminecraft.codex.model.data.PlayerDataDiscovery;
-import net.tfminecraft.codex.model.internal.GenericCallback;
+import net.tfminecraft.codex.character.CharacterStore;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.scheduler.BukkitRunnable;
 
 import java.io.File;
 import java.util.*;
 
+/** The per-character discovery files in {@code characters/}; see {@link net.tfminecraft.codex.character.CharacterStore}. */
 public class PlayersConfigManager extends DataFolderConfigManager {
-
 
     public PlayersConfigManager(Codex plugin, String folderName) {
         super(plugin, folderName);
@@ -23,86 +19,15 @@ public class PlayersConfigManager extends DataFolderConfigManager {
         // No use for player config
     }
 
-    public void loadConfig(UUID uuid, GenericCallback<PlayerData> callback){
-        new BukkitRunnable(){
-            @Override
-            public void run() {
-                PlayerData playerData = null;
-                CommonConfig playerConfig = getConfigFile(uuid+".yml",false);
-                if(playerConfig != null){
-                    // If config exists
-                    FileConfiguration config = playerConfig.getConfig();
-                    String name = config.getString("name");
-                    ArrayList<PlayerDataCategory> playerDataCategories = new ArrayList<>();
-                    if(config.contains("categories")){
-                        for(String key : config.getConfigurationSection("categories").getKeys(false)){
-                            List<String> discoveriesStringList = config.getStringList("categories."+key+".discoveries");
-                            boolean completed = config.getBoolean("categories."+key+".completed");
-
-                            ArrayList<PlayerDataDiscovery> discoveries = new ArrayList<>();
-                            for(String d : discoveriesStringList){
-                                String[] sep = d.split(";");
-                                long millisActionsExecuted = 0;
-                                if(sep.length == 3){
-                                    millisActionsExecuted = Long.parseLong(sep[2]);
-                                }
-                                discoveries.add(new PlayerDataDiscovery(sep[0],sep[1],millisActionsExecuted));
-                            }
-                            playerDataCategories.add(new PlayerDataCategory(key,completed,discoveries));
-                        }
-                    }
-
-                    playerData = new PlayerData(uuid,name);
-                    playerData.setCategories(playerDataCategories);
-                }
-
-                PlayerData finalPlayer = playerData;
-
-                new BukkitRunnable(){
-                    @Override
-                    public void run() {
-                        callback.onDone(finalPlayer);
-                    }
-                }.runTask(plugin);
-            }
-        }.runTaskAsynchronously(plugin);
-    }
-
-    public void saveConfig(PlayerData playerData){
-        String playerName = playerData.getName();
-        CommonConfig playerConfig = getConfigFile(playerData.getUuid()+".yml",true);
-        FileConfiguration config = playerConfig.getConfig();
-
-        config.set("name", playerName);
-        config.set("categories",null);
-        List<PlayerDataCategory> categories = playerData.getCategories();
-        for(PlayerDataCategory category : categories){
-            String path = "categories."+category.getName();
-            config.set(path+".completed",category.isCompleted());
-            config.set(path+".discoveries",category.getDiscoveriesToStringList());
-        }
-
-        playerConfig.saveConfig();
-    }
-
     @Override
     public void saveConfigs(){
-        Map<UUID, PlayerData> players = plugin.getPlayerDataManager().getPlayers();
-        boolean isMySQL = plugin.getConfigsManager().getMainConfigManager().isMySQL();
-        if(!isMySQL){
-            for(Map.Entry<UUID, PlayerData> entry : players.entrySet()) {
-                PlayerData playerData = entry.getValue();
-                if(playerData.isModified()){
-                    saveConfig(playerData);
-                }
-                playerData.setModified(false);
-            }
-        }
-
+        plugin.getCharacterJournals().saveAll();
     }
 
+    /** Resets every character's file and every account's file from before journals were per character. */
     public void resetDataForAllPlayers(String categoryName,String discoveryName){
         ArrayList<CommonConfig> configs = getConfigs();
+        configs.addAll(getConfigs(CharacterStore.LEGACY));
         for(CommonConfig commonConfig : configs) {
             FileConfiguration config = commonConfig.getConfig();
 

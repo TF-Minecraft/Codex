@@ -1,5 +1,6 @@
 package net.tfminecraft.codex.config;
 
+import net.tfminecraft.codex.character.CharacterStore;
 
 import net.tfminecraft.codex.Codex;
 
@@ -16,7 +17,7 @@ public class ConfigsManager {
 		this.plugin = plugin;
 		this.mainConfigManager = new MainConfigManager(plugin);
 		this.categoriesConfigManager = new CategoriesConfigManager(plugin,"categories");
-		this.playersConfigManager = new PlayersConfigManager(plugin,"players");
+		this.playersConfigManager = new PlayersConfigManager(plugin,CharacterStore.CHARACTERS);
 		this.messagesConfigManager = new MessagesConfigManager(plugin);
 		this.inventoryConfigManager = new InventoryConfigManager(plugin);
 	}

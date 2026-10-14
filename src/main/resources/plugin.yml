@@ -3,6 +3,7 @@ version: ${project.version}
 name: Codex
 api-version: '1.21.10'
 author: Ajneb97
+depend: [TLibs]
 softdepend: [WorldGuard,WorldEdit,PlaceholderAPI,MythicMobs,Residence]
 
 commands:

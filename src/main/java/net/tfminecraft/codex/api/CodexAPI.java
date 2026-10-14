@@ -24,7 +24,7 @@ public class CodexAPI {
     }
 
     public static PlayerData getPlayerData(Player player){
-        return plugin.getPlayerDataManager().getPlayer(player,false);
+        return plugin.getPlayerDataManager().getPlayer(player);
     }
 
     public static PlayerData getPlayerData(String playerName){

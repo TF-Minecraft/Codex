@@ -4,14 +4,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+/** One character's discoveries, held while its owner plays it. {@code uuid} is the owner's account. */
 public class PlayerData {
     private UUID uuid;
+    private UUID characterId;
     private String name;
     private List<PlayerDataCategory> categories;
     private boolean modified;
 
-    public PlayerData(UUID uuid, String name){
+    public PlayerData(UUID uuid, UUID characterId, String name){
         this.uuid = uuid;
+        this.characterId = characterId;
         this.name = name;
         this.modified = false;
         this.categories = new ArrayList<>();
@@ -23,6 +26,10 @@ public class PlayerData {
 
     public void setUuid(UUID uuid) {
         this.uuid = uuid;
+    }
+
+    public UUID getCharacterId() {
+        return characterId;
     }
 
     public String getName() {

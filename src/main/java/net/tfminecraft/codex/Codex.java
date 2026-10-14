@@ -1,10 +1,11 @@
 package net.tfminecraft.codex;
 
 import net.tfminecraft.codex.api.CodexAPI;
+import net.tfminecraft.codex.character.CharacterJournals;
+import net.tfminecraft.codex.character.CharacterStore;
 import net.tfminecraft.codex.api.ExpansionCodex;
 import net.tfminecraft.codex.commands.MainCommand;
 import net.tfminecraft.codex.config.ConfigsManager;
-import net.tfminecraft.codex.database.MySQLConnection;
 import net.tfminecraft.codex.listeners.InventoryListener;
 import net.tfminecraft.codex.listeners.PlayerListener;
 import net.tfminecraft.codex.listeners.dependencies.EliteMobsListener;
@@ -37,8 +38,8 @@ public class Codex extends JavaPlugin {
     private DiscoveryManager discoveryManager;
     private DependencyManager dependencyManager;
     private PlayerDataManager playerDataManager;
+    private CharacterJournals characterJournals;
 
-    private MySQLConnection mySQLConnection;
     private PlayerDataSaveTask playerDataSaveTask;
     private VerifyManager verifyManager;
 
@@ -61,8 +62,10 @@ public class Codex extends JavaPlugin {
             return;
         }
 
+        characterJournals = new CharacterJournals(playerDataManager, new CharacterStore(getDataFolder().toPath()), getLogger());
         registerEvents();
         registerCommands();
+        characterJournals.start();
 
         reloadPlayerDataSaveTask();
 
@@ -74,16 +77,13 @@ public class Codex extends JavaPlugin {
         this.verifyManager = new VerifyManager(this);
         this.verifyManager.verify();
 
-        if(configsManager.getMainConfigManager().isMySQL()){
-            mySQLConnection = new MySQLConnection(this);
-            mySQLConnection.setupMySql();
-        }
-
         Bukkit.getConsoleSender().sendMessage(prefix+MessagesManager.getLegacyColoredMessage("&eHas been enabled! &fVersion: "+version));
     }
 
     public void onDisable(){
-        configsManager.getPlayersConfigManager().saveConfigs();
+        if(characterJournals != null){
+            characterJournals.stop();
+        }
 
         Bukkit.getConsoleSender().sendMessage(prefix+MessagesManager.getLegacyColoredMessage("&eHas been disabled! &fVersion: "+version));
     }
@@ -95,6 +95,7 @@ public class Codex extends JavaPlugin {
         PluginManager pm = getServer().getPluginManager();
         pm.registerEvents(new InventoryListener(this), this);
         pm.registerEvents(new PlayerListener(this), this);
+        pm.registerEvents(characterJournals, this);
         if(dependencyManager.getWorldGuardManager() != null){
             pm.registerEvents(new WorldGuardListener(this), this);
         }
@@ -210,12 +211,12 @@ public class Codex extends JavaPlugin {
         return dependencyManager;
     }
 
-    public PlayerDataManager getPlayerDataManager() {
-        return playerDataManager;
+    public CharacterJournals getCharacterJournals() {
+        return characterJournals;
     }
 
-    public MySQLConnection getMySQLConnection() {
-        return mySQLConnection;
+    public PlayerDataManager getPlayerDataManager() {
+        return playerDataManager;
     }
 
     public CategoryManager getCategoryManager() {

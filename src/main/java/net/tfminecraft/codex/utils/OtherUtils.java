@@ -1,5 +1,7 @@
 package net.tfminecraft.codex.utils;
 
+import java.util.List;
+
 import net.tfminecraft.codex.Codex;
 import net.tfminecraft.codex.config.MainConfigManager;
 import me.clip.placeholderapi.PlaceholderAPI;
@@ -93,5 +95,13 @@ public class OtherUtils {
         LocalDate currentDate = LocalDate.now();
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern(format);
         return currentDate.format(formatter);
+    }
+
+    /** "A", "A and B", "A, B and C". */
+    public static String joinNames(List<String> names){
+        if(names.size() == 1){
+            return names.get(0);
+        }
+        return String.join(", ",names.subList(0,names.size()-1))+" and "+names.get(names.size()-1);
     }
 }
