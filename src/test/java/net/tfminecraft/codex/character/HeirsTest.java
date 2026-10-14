@@ -23,10 +23,20 @@ class HeirsTest {
     @Test
     void reviewedHeirWins() {
         CharacterInfo played = info(CharacterStatus.ALIVE, 9000, null);
-        UUID reviewed = UUID.randomUUID();
+        CharacterInfo reviewed = info(CharacterStatus.ALIVE, 10, null);
 
-        assertEquals(Optional.of(reviewed),
-                Heirs.choose(Optional.of(new CharacterRef(owner, reviewed)), Optional.of(List.of(played))));
+        assertEquals(Optional.of(id(reviewed)),
+                Heirs.choose(Optional.of(reviewed.ref()), Optional.of(List.of(played, reviewed))));
+    }
+
+    @Test
+    void aReviewedHeirDeletedSinceFallsThroughToTheRoster() {
+        CharacterInfo left = info(CharacterStatus.ALIVE, 10, null);
+        UUID deleted = UUID.randomUUID();
+
+        assertEquals(Optional.of(id(left)),
+                Heirs.choose(Optional.of(new CharacterRef(owner, deleted)), Optional.of(List.of(left))));
+        assertEquals(Optional.of(deleted), Heirs.choose(Optional.of(new CharacterRef(owner, deleted)), Optional.empty()));
     }
 
     @Test
@@ -63,7 +73,7 @@ class HeirsTest {
 
             characters.when(Characters::legacyHeirsReady).thenReturn(true);
             characters.when(() -> Characters.legacyHeir(owner)).thenReturn(Optional.of(new CharacterRef(owner, reviewed)));
-            characters.when(() -> Characters.characters(owner)).thenReturn(Optional.of(List.of()));
+            characters.when(() -> Characters.characters(owner)).thenReturn(Optional.empty());
             assertEquals(Optional.of(reviewed), Heirs.of(owner));
         }
     }

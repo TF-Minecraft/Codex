@@ -13,6 +13,7 @@ public class MessagesConfigManager {
     public static final String KNOWN_BY = "&7%characters% can use this in character.";
     public static final String KNOWN_BY_NOBODY = "&7No living character can use this in character.";
     public static final String OUT_OF_CHARACTER_ONLY = "&8&o%character% knows this only out of character.";
+    public static final String NO_CHARACTER_IN_PLAY = "&cChoose a character to open the Codex.";
 
 
     private Codex plugin;
@@ -60,6 +61,10 @@ public class MessagesConfigManager {
                 config.set("knownInCharacterBy",KNOWN_BY);
                 config.set("knownInCharacterByNobody",KNOWN_BY_NOBODY);
                 config.set("knownOutOfCharacterOnly",OUT_OF_CHARACTER_ONLY);
+                configFile.saveConfig();
+            }
+            if(!text.contains("noCharacterInPlay:")){
+                config.set("noCharacterInPlay",NO_CHARACTER_IN_PLAY);
                 configFile.saveConfig();
             }
             if(!text.contains("clickActionsCooldown:")){

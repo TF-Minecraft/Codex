@@ -29,13 +29,16 @@ final class Heirs {
 
     /**
      * The reviewed heir RPCharacters gives money and bodies to. Accounts that joined after that review
-     * have none, so their most-played living character inherits, else their most-played character.
+     * have none, and a reviewed heir can since have been deleted; then the most-played living character
+     * inherits, else the most-played character.
      */
     static Optional<UUID> choose(Optional<CharacterRef> reviewed, Optional<List<CharacterInfo>> characters) {
-        if (reviewed.isPresent()) {
+        List<CharacterInfo> all = characters.orElse(List.of());
+        // A reviewed heir deleted since the review falls through to the rule below.
+        if (reviewed.isPresent() && (characters.isEmpty()
+                || all.stream().anyMatch(info -> info.ref().characterId().equals(reviewed.get().characterId())))) {
             return Optional.of(reviewed.get().characterId());
         }
-        List<CharacterInfo> all = characters.orElse(List.of());
         Optional<CharacterInfo> heir = all.stream().filter(CharacterInfo::alive).max(MOST_PLAYED);
         if (heir.isEmpty()) {
             heir = all.stream().max(MOST_PLAYED);

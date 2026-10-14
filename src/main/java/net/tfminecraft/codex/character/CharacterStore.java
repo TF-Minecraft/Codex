@@ -25,7 +25,7 @@ import net.tfminecraft.codex.model.data.PlayerDataDiscovery;
  */
 public final class CharacterStore {
     public static final String CHARACTERS = "characters";
-    static final String LEGACY = "players";
+    public static final String LEGACY = "players";
     static final String MIGRATED = "players-migrated";
 
     private final Path characters;
@@ -107,7 +107,11 @@ public final class CharacterStore {
     /** Moves the account's old file aside once its discoveries belong to a character. */
     public void retireLegacy(UUID owner) throws IOException {
         Files.createDirectories(migrated);
-        Files.move(legacyFile(owner), migrated.resolve(owner + ".yml"), StandardCopyOption.REPLACE_EXISTING);
+        Path target = migrated.resolve(owner + ".yml");
+        for (int copy = 2; Files.exists(target); copy++) {
+            target = migrated.resolve(owner + "-" + copy + ".yml");
+        }
+        Files.move(legacyFile(owner), target);
     }
 
     private Path legacyFile(UUID owner) {

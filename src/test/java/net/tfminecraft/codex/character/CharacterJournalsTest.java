@@ -266,6 +266,12 @@ class CharacterJournalsTest {
             verify(task, never()).cancel();
             assertTrue(store.hasLegacy(owner));
 
+            for (int second = 1; second < CharacterJournals.WARN_AFTER_SECONDS; second++) {
+                tick.getValue().run();
+            }
+            assertLogged(Level.WARNING, "has not reported heirs after 60 seconds");
+            tick.getValue().run();
+
             characters.when(Characters::legacyHeirsReady).thenReturn(true);
             tick.getValue().run();
         }
@@ -326,6 +332,17 @@ class CharacterJournalsTest {
 
         journals.onEnd(end(first));
         assertNull(journals.knowledge(player));
+    }
+
+    @Test
+    void aBrokenRosterLookupStillOpensTheJournal() {
+        characters.when(() -> Characters.characters(owner)).thenThrow(new IllegalStateException("boom"));
+
+        journals.onStart(start(first));
+
+        assertNotNull(players.getPlayer(player));
+        assertEquals("Steve", journals.knowledge(player).characterName());
+        assertLogged(Level.WARNING, "Could not read the other characters of account " + owner);
     }
 
     @Test

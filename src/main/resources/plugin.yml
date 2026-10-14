@@ -4,7 +4,7 @@ name: Codex
 api-version: '1.21.10'
 author: Ajneb97
 depend: [TLibs]
-softdepend: [RPCharacters,WorldGuard,WorldEdit,PlaceholderAPI,MythicMobs,Residence]
+softdepend: [WorldGuard,WorldEdit,PlaceholderAPI,MythicMobs,Residence]
 
 commands:
   codex:

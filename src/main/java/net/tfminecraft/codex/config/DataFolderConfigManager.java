@@ -48,15 +48,21 @@ public abstract class DataFolderConfigManager {
     }
 
     public ArrayList<CommonConfig> getConfigs(){
+        return getConfigs(folderName);
+    }
+
+    /** Every file in a folder of the data folder; none if the folder is missing. */
+    public ArrayList<CommonConfig> getConfigs(String folder){
         ArrayList<CommonConfig> configs = new ArrayList<>();
 
-        String pathFile = plugin.getDataFolder() + File.separator + folderName;
-        File folder = new File(pathFile);
-        File[] listOfFiles = folder.listFiles();
+        File[] listOfFiles = new File(plugin.getDataFolder() + File.separator + folder).listFiles();
+        if(listOfFiles == null){
+            return configs;
+        }
         for (File file : listOfFiles) {
             if (file.isFile()) {
                 String pathName = file.getName();
-                CommonConfig commonConfig = new CommonConfig(pathName, plugin, folderName, true);
+                CommonConfig commonConfig = new CommonConfig(pathName, plugin, folder, true);
                 commonConfig.registerConfig();
                 configs.add(commonConfig);
             }

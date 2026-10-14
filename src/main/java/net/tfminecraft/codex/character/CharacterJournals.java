@@ -37,6 +37,7 @@ public final class CharacterJournals implements Listener {
     private final PlayerDataManager players;
     private final CharacterStore store;
     private final Logger logger;
+    static final int WARN_AFTER_SECONDS = 60;
     private final Map<UUID, AccountKnowledge> knowledge = new HashMap<>();
     private BukkitTask sweep;
 
@@ -51,10 +52,15 @@ public final class CharacterJournals implements Listener {
         for (Player player : Bukkit.getOnlinePlayers()) {
             Characters.currentSession(player).ifPresent(session -> open(player, session.ref()));
         }
+        int[] waited = {0};
         sweep = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (Characters.legacyHeirsReady()) {
                 sweep.cancel();
                 migrateAll();
+                refreshKnowledge();
+            } else if (++waited[0] == WARN_AFTER_SECONDS) {
+                logger.warning("RPCharacters has not reported heirs after " + WARN_AFTER_SECONDS + " seconds; "
+                        + "account Codex files in players/ wait until character bodies are enabled");
             }
         }, 1L, 20L);
     }
@@ -117,6 +123,16 @@ public final class CharacterJournals implements Listener {
     }
 
     private AccountKnowledge knowledgeOf(CharacterRef ref, String fallbackName) {
+        try {
+            return readKnowledge(ref, fallbackName);
+        } catch (RuntimeException ex) {
+            logger.log(Level.WARNING, "Could not read the other characters of account " + ref.ownerId()
+                    + "; only this character's own Codex is shown", ex);
+            return AccountKnowledge.empty(fallbackName);
+        }
+    }
+
+    private AccountKnowledge readKnowledge(CharacterRef ref, String fallbackName) {
         String name = fallbackName;
         AccountKnowledge.Builder builder = new AccountKnowledge.Builder();
         for (CharacterInfo info : Characters.characters(ref.ownerId()).orElse(List.of())) {

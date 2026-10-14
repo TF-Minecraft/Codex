@@ -144,7 +144,12 @@ class CharacterStoreTest {
         store.retireLegacy(owner);
 
         assertFalse(store.hasLegacy(owner));
-        assertTrue(Files.readString(folder.resolve("players-migrated").resolve(owner + ".yml")).contains("Steve"));
+        assertTrue(Files.readString(folder.resolve("players-migrated").resolve(owner + ".yml")).contains("Older"));
+        assertTrue(Files.readString(folder.resolve("players-migrated").resolve(owner + "-2.yml")).contains("Steve"));
+
+        write("players", owner, "name: Third\n");
+        store.retireLegacy(owner);
+        assertTrue(Files.readString(folder.resolve("players-migrated").resolve(owner + "-3.yml")).contains("Third"));
     }
 
     @Test

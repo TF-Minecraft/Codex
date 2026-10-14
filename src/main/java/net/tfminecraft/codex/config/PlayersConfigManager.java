@@ -1,6 +1,7 @@
 package net.tfminecraft.codex.config;
 
 import net.tfminecraft.codex.Codex;
+import net.tfminecraft.codex.character.CharacterStore;
 import org.bukkit.configuration.file.FileConfiguration;
 
 import java.io.File;
@@ -23,8 +24,10 @@ public class PlayersConfigManager extends DataFolderConfigManager {
         plugin.getCharacterJournals().saveAll();
     }
 
+    /** Resets every character's file and every account file still waiting to move to its heir. */
     public void resetDataForAllPlayers(String categoryName,String discoveryName){
         ArrayList<CommonConfig> configs = getConfigs();
+        configs.addAll(getConfigs(CharacterStore.LEGACY));
         for(CommonConfig commonConfig : configs) {
             FileConfiguration config = commonConfig.getConfig();
 
