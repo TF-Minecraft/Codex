@@ -77,7 +77,7 @@ class CharacterJournalsTest {
             public void close() {
             }
         });
-        journals = new CharacterJournals(players, store, logger);
+        journals = new CharacterJournals(players, store, new LegacyRecipient(folder.resolve("plugins")), logger);
         player = mock(Player.class);
         when(player.getUniqueId()).thenReturn(owner);
         when(player.getName()).thenReturn("Steve");
@@ -145,6 +145,26 @@ class CharacterJournalsTest {
         aldric.resetDiscovery("poi", "syrindell");
         journals.onStart(start(second));
         assertFalse(store.load(owner, first, "Steve").hasDiscovery("poi", "syrindell"));
+    }
+
+    @Test
+    void aRetryAfterAFailedMarkerGoesToThePinnedCharacter() throws IOException {
+        legacy("syrindell");
+        characters.when(() -> Characters.characters(owner)).thenReturn(Optional.of(List.of(
+                played(first, "Aldric", 100), played(second, "Mira", 99))));
+        Files.createDirectories(folder.resolve("players").resolve(owner + ".yml.tmp"));
+
+        journals.onStart(start(first));
+        assertLogged(Level.SEVERE, "Could not copy the old Codex of account " + owner);
+        assertTrue(store.load(owner, first, "Steve").hasDiscovery("poi", "syrindell"));
+
+        Files.delete(folder.resolve("players").resolve(owner + ".yml.tmp"));
+        characters.when(() -> Characters.characters(owner)).thenReturn(Optional.of(List.of(
+                played(first, "Aldric", 100), played(second, "Mira", 500))));
+        journals.onStart(start(second));
+
+        assertFalse(players.getPlayer(player).hasDiscovery("poi", "syrindell"));
+        assertEquals(first, store.readLegacy(owner).seededTo());
     }
 
     @Test

@@ -36,13 +36,15 @@ public final class CharacterJournals implements Listener {
     private final PlayerDataManager players;
     private final CharacterStore store;
     private final Logger logger;
+    private final LegacyRecipient recipients;
     private final Map<UUID, AccountKnowledge> knowledge = new HashMap<>();
     /** Journals of characters no longer in play whose last save failed, by character; retried with every save. */
     private final Map<UUID, PlayerData> unsaved = new HashMap<>();
 
-    public CharacterJournals(PlayerDataManager players, CharacterStore store, Logger logger) {
+    public CharacterJournals(PlayerDataManager players, CharacterStore store, LegacyRecipient recipients, Logger logger) {
         this.players = players;
         this.store = store;
+        this.recipients = recipients;
         this.logger = logger;
     }
 
@@ -87,8 +89,9 @@ public final class CharacterJournals implements Listener {
 
     /**
      * Once per account: copies its journal from before characters had their own into its most-played
-     * living character's journal, chosen at the account's first session after the change. The old
-     * file stays as out-of-character reference and records the copy, so it never happens twice.
+     * living character's journal, chosen at the account's first session after the change and pinned
+     * for good (see {@link LegacyRecipient}). The old file stays as out-of-character reference and
+     * records the copy; a retry after a failure goes to the same character and adds nothing twice.
      */
     void seed(UUID owner) {
         if (!store.hasLegacy(owner)) {
@@ -99,7 +102,7 @@ public final class CharacterJournals implements Listener {
             if (legacy.seededTo() != null) {
                 return;
             }
-            Optional<UUID> heir = MostPlayed.of(Characters.characters(owner));
+            Optional<UUID> heir = recipients.of(owner, () -> MostPlayed.of(Characters.characters(owner)));
             if (heir.isEmpty()) {
                 return;
             }
