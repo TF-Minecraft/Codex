@@ -55,6 +55,42 @@ class CharacterJournalsTest {
     private CharacterStore store;
     private CharacterJournals journals;
     private Player player;
+    private FakeExploration exploration;
+
+    /** Shares everything but research and the "secret" achievement, carrying the Player EXP lines. */
+    private static final SharedExploration.Settings SHARING = new SharedExploration.Settings(true,
+            Set.of("research", "achievements:secret"),
+            List.of(new SharedExploration.Rewrite("console_command: mmocore admin exp give %player% main ",
+                    "console_command: rpcharacter admin carryexp %player% ")));
+
+    private static final class FakeExploration implements Exploration {
+        SharedExploration.Settings settings = SharedExploration.Settings.OFF;
+        final List<Long> delays = new ArrayList<>();
+        final List<Runnable> tasks = new ArrayList<>();
+        final List<List<SharedExploration.Copy>> rewarded = new ArrayList<>();
+
+        @Override
+        public SharedExploration.Settings settings() {
+            return settings;
+        }
+
+        @Override
+        public void reward(Player player, List<SharedExploration.Copy> copies) {
+            rewarded.add(copies);
+        }
+
+        @Override
+        public void later(long ticks, Runnable task) {
+            delays.add(ticks);
+            tasks.add(task);
+        }
+
+        void runAll() {
+            List<Runnable> due = new ArrayList<>(tasks);
+            tasks.clear();
+            due.forEach(Runnable::run);
+        }
+    }
 
     @BeforeEach
     void setUp() {
@@ -77,7 +113,8 @@ class CharacterJournalsTest {
             public void close() {
             }
         });
-        journals = new CharacterJournals(players, store, new LegacyRecipient(folder.resolve("plugins")), logger);
+        exploration = new FakeExploration();
+        journals = new CharacterJournals(players, store, new LegacyRecipient(folder.resolve("plugins")), exploration, logger);
         player = mock(Player.class);
         when(player.getUniqueId()).thenReturn(owner);
         when(player.getName()).thenReturn("Steve");
@@ -358,6 +395,102 @@ class CharacterJournalsTest {
 
         assertEquals(List.of("Mira"), journals.knowledge(player).other("poi", "aurea").livingNames());
         assertEquals("Aldric", journals.knowledge(player).characterName());
+    }
+
+    @Test
+    void sharingIsOffUnlessConfigured() throws IOException {
+        saved(second, "aurea");
+        characters.when(() -> Characters.characters(owner)).thenReturn(Optional.of(List.of(
+                info(first, "Aldric", CharacterStatus.ALIVE), info(second, "Mira", CharacterStatus.ALIVE))));
+
+        journals.onStart(start(first));
+
+        assertTrue(exploration.tasks.isEmpty());
+        assertFalse(players.getPlayer(player).hasDiscovery("poi", "aurea"));
+    }
+
+    @Test
+    void aCharacterGetsItsAccountsExplorationButNotItsResearch() throws IOException {
+        exploration.settings = SHARING;
+        when(player.isOnline()).thenReturn(true);
+        UUID dead = UUID.randomUUID();
+        PlayerData mira = new PlayerData(owner, second, "Steve");
+        mira.addDiscovery("poi", "aurea", "01/10/2026");
+        mira.addDiscovery("research", "ignitium", "02/10/2026");
+        mira.addDiscovery("achievements", "secret", "03/10/2026");
+        mira.addDiscovery("achievements", "die", "04/10/2026");
+        store.save(mira);
+        saved(dead, "vard");
+        legacy("syrindell");
+        // Already copied to Mira once; the account file still counts as a source.
+        store.markSeeded(owner, second);
+        characters.when(() -> Characters.characters(owner)).thenReturn(Optional.of(List.of(
+                info(first, "Aldric", CharacterStatus.ALIVE), info(second, "Mira", CharacterStatus.ALIVE),
+                info(dead, "Old Tom", CharacterStatus.DEAD))));
+
+        journals.onStart(start(first));
+        assertEquals(List.of(CharacterJournals.SHARE_DELAY_TICKS), exploration.delays);
+        assertFalse(players.getPlayer(player).hasDiscovery("poi", "aurea"), "Nothing arrives before the delay");
+        exploration.runAll();
+
+        PlayerData aldric = players.getPlayer(player);
+        assertTrue(aldric.hasDiscovery("poi", "syrindell"), "The journal from before characters counts");
+        assertTrue(aldric.hasDiscovery("poi", "aurea"));
+        assertTrue(aldric.hasDiscovery("poi", "vard"), "Dead characters count");
+        assertTrue(aldric.hasDiscovery("achievements", "die"));
+        assertFalse(aldric.hasDiscovery("research", "ignitium"));
+        assertFalse(aldric.hasDiscovery("achievements", "secret"));
+        assertEquals("01/10/2026", aldric.getDiscovery("poi", "aurea").getDiscoverDate(), "The first find's date is kept");
+        assertEquals(List.of(new SharedExploration.Copy("poi", "syrindell"), new SharedExploration.Copy("poi", "aurea"),
+                new SharedExploration.Copy("achievements", "die"), new SharedExploration.Copy("poi", "vard")),
+                exploration.rewarded.getFirst());
+        assertTrue(store.load(owner, first, "Steve").hasDiscovery("poi", "aurea"), "The journal is saved before rewards run");
+        assertLogged(Level.INFO, "Shared 4 Codex discoveries of account " + owner + " with its character " + first);
+
+        journals.onStart(start(first));
+        exploration.runAll();
+        assertEquals(1, exploration.rewarded.size(), "Nothing is shared or paid twice");
+    }
+
+    @Test
+    void sharingWaitsForTheSameCharacterToStillBeInPlay() throws IOException {
+        exploration.settings = SHARING;
+        saved(second, "aurea");
+        characters.when(() -> Characters.characters(owner)).thenReturn(Optional.of(List.of(
+                info(first, "Aldric", CharacterStatus.ALIVE), info(second, "Mira", CharacterStatus.ALIVE))));
+
+        journals.onStart(start(first));
+        exploration.runAll();
+        assertFalse(players.getPlayer(player).hasDiscovery("poi", "aurea"), "An offline player gets nothing");
+
+        when(player.isOnline()).thenReturn(true);
+        journals.onStart(start(first));
+        journals.onStart(start(second));
+        exploration.runAll();
+        assertFalse(store.load(owner, first, "Steve").hasDiscovery("poi", "aurea"), "A switched-away character gets nothing");
+
+        journals.onStart(start(first));
+        journals.onQuit(new PlayerQuitEvent(player, "bye"));
+        exploration.runAll();
+        assertTrue(exploration.rewarded.isEmpty());
+    }
+
+    @Test
+    void sharedDiscoveriesStillArriveWhenTheJournalCannotBeSaved() throws IOException {
+        exploration.settings = SHARING;
+        when(player.isOnline()).thenReturn(true);
+        saved(second, "aurea");
+        characters.when(() -> Characters.characters(owner)).thenReturn(Optional.of(List.of(
+                info(first, "Aldric", CharacterStatus.ALIVE), info(second, "Mira", CharacterStatus.ALIVE))));
+        journals.onStart(start(first));
+        Files.createDirectories(store.characterFile(first));
+
+        exploration.runAll();
+
+        assertTrue(players.getPlayer(player).hasDiscovery("poi", "aurea"));
+        assertTrue(players.getPlayer(player).isModified(), "The journal waits for the next save");
+        assertEquals(1, exploration.rewarded.size());
+        assertLogged(Level.SEVERE, "Could not save Codex for character " + first);
     }
 
     private CharacterInfo played(UUID character, String name, long seconds) {

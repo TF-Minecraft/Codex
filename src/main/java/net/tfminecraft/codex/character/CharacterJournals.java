@@ -20,6 +20,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 
 import net.tfminecraft.codex.managers.PlayerDataManager;
 import net.tfminecraft.codex.model.data.PlayerData;
+import net.tfminecraft.codex.model.data.PlayerDataCategory;
 import net.tfminecraft.tlibs.character.CharacterInfo;
 import net.tfminecraft.tlibs.character.CharacterRef;
 import net.tfminecraft.tlibs.character.CharacterSessionEndEvent;
@@ -30,21 +31,32 @@ import net.tfminecraft.tlibs.character.Characters;
  * Gives each character its own journal: loaded when a character session starts and saved when it
  * ends. Between characters a player has no journal, so nothing can be discovered. Alongside it sits
  * what the account knows from its other characters and from before journals were per character, so
- * entries stay readable out of character. Main thread only.
+ * entries stay readable out of character. Shared discoveries (see {@link SharedExploration}) are copied
+ * into the journal shortly after its session starts. Main thread only.
  */
 public final class CharacterJournals implements Listener {
+    /** Shared discoveries arrive after the character's class and body are in place, and once the screen settles. */
+    static final long SHARE_DELAY_TICKS = 40L;
+
     private final PlayerDataManager players;
     private final CharacterStore store;
     private final Logger logger;
     private final LegacyRecipient recipients;
+    private final Exploration exploration;
     private final Map<UUID, AccountKnowledge> knowledge = new HashMap<>();
     /** Journals of characters no longer in play whose last save failed, by character; retried with every save. */
     private final Map<UUID, PlayerData> unsaved = new HashMap<>();
 
-    public CharacterJournals(PlayerDataManager players, CharacterStore store, LegacyRecipient recipients, Logger logger) {
+    /** An account's journal other than the played character's; {@code name} is null for the one from before characters. */
+    private record Journal(List<PlayerDataCategory> categories, String name, boolean alive) {
+    }
+
+    public CharacterJournals(PlayerDataManager players, CharacterStore store, LegacyRecipient recipients,
+            Exploration exploration, Logger logger) {
         this.players = players;
         this.store = store;
         this.recipients = recipients;
+        this.exploration = exploration;
         this.logger = logger;
     }
 
@@ -81,6 +93,9 @@ public final class CharacterJournals implements Listener {
             PlayerData pending = unsaved.remove(ref.characterId());
             players.addPlayer(pending != null ? pending : store.load(ref.ownerId(), ref.characterId(), player.getName()));
             knowledge.put(ref.ownerId(), knowledgeOf(ref, player.getName()));
+            if (exploration.settings().enabled()) {
+                exploration.later(SHARE_DELAY_TICKS, () -> share(player, ref));
+            }
         } catch (IOException ex) {
             logger.log(Level.SEVERE, "Codex for character " + ref.characterId() + " of " + player.getName()
                     + " could not be read; nothing can be discovered until it is fixed", ex);
@@ -119,6 +134,31 @@ public final class CharacterJournals implements Listener {
             logger.log(Level.SEVERE, "Could not copy the old Codex of account " + owner
                     + " to its most-played character; trying again at its next session", ex);
         }
+    }
+
+    /**
+     * Copies into the played character's journal the shared discoveries its account found elsewhere,
+     * then runs their rewards that carry over. Only while that character is still in play. The journal
+     * is saved before the rewards run, so a crash can lose a reward but never pay it twice; a failed save
+     * keeps the journal in memory, saved with the next save.
+     */
+    void share(Player player, CharacterRef ref) {
+        PlayerData journal = players.getPlayerByUUID(ref.ownerId());
+        if (!player.isOnline() || journal == null || !ref.characterId().equals(journal.getCharacterId())) {
+            return;
+        }
+        List<List<PlayerDataCategory>> others = new ArrayList<>();
+        for (Journal other : otherJournals(ref)) {
+            others.add(other.categories());
+        }
+        List<SharedExploration.Copy> copies = SharedExploration.copy(journal, others, exploration.settings());
+        if (copies.isEmpty()) {
+            return;
+        }
+        save(journal);
+        logger.info("Shared " + copies.size() + " Codex discoveries of account " + ref.ownerId()
+                + " with its character " + ref.characterId());
+        exploration.reward(player, copies);
     }
 
     /** Saves and unloads the player's journal; with a character ID, only that character's. */
@@ -186,31 +226,46 @@ public final class CharacterJournals implements Listener {
     private AccountKnowledge readKnowledge(CharacterRef ref, String fallbackName) {
         String name = fallbackName;
         AccountKnowledge.Builder builder = new AccountKnowledge.Builder();
-        // What the account found before journals were per character: readable, but no character knows it.
+        // What the account found before journals were per character is readable, but no character knows it.
+        for (Journal other : otherJournals(ref)) {
+            builder.add(other.categories(), other.name(), other.alive());
+        }
+        for (CharacterInfo info : Characters.characters(ref.ownerId()).orElse(List.of())) {
+            if (info.ref().characterId().equals(ref.characterId())) {
+                name = info.name();
+            }
+        }
+        return builder.build(name);
+    }
+
+    /** The account's journal from before characters had their own, then each other character's, alive or dead. */
+    private List<Journal> otherJournals(CharacterRef ref) {
+        List<Journal> journals = new ArrayList<>();
         if (store.hasLegacy(ref.ownerId())) {
             try {
-                builder.add(store.readLegacy(ref.ownerId()).categories(), null, false);
+                journals.add(new Journal(store.readLegacy(ref.ownerId()).categories(), null, false));
             } catch (IOException ex) {
                 logger.log(Level.WARNING, "The account Codex of " + ref.ownerId() + " could not be read; "
                         + "its old discoveries are left out of its reference", ex);
             }
         }
-        List<CharacterInfo> roster = Characters.characters(ref.ownerId()).orElse(List.of());
-        for (CharacterInfo info : roster) {
+        for (CharacterInfo info : Characters.characters(ref.ownerId()).orElse(List.of())) {
             UUID id = info.ref().characterId();
             if (id.equals(ref.characterId())) {
-                name = info.name();
-            } else if (unsaved.containsKey(id)) {
-                builder.add(unsaved.get(id).getCategories(), info.name(), info.alive());
+                continue;
+            }
+            if (unsaved.containsKey(id)) {
+                journals.add(new Journal(unsaved.get(id).getCategories(), info.name(), info.alive()));
             } else if (Files.exists(store.characterFile(id))) {
                 try {
-                    builder.add(store.load(ref.ownerId(), id, info.name()).getCategories(), info.name(), info.alive());
+                    journals.add(new Journal(store.load(ref.ownerId(), id, info.name()).getCategories(), info.name(),
+                            info.alive()));
                 } catch (IOException ex) {
                     logger.log(Level.WARNING, "Codex for character " + id + " could not be read; "
                             + "its discoveries are left out of its account's reference", ex);
                 }
             }
         }
-        return builder.build(name);
+        return journals;
     }
 }
