@@ -14,6 +14,10 @@ public class MessagesConfigManager {
     public static final String KNOWN_BY_NOBODY = "&7No character can use this in character.";
     public static final String OUT_OF_CHARACTER_ONLY = "&8&o%character% knows this only out of character.";
     public static final String NO_CHARACTER_IN_PLAY = "&cChoose a character to open the Codex.";
+    public static final String OUT_OF_CHARACTER_ADVICE =
+            "&8&oUse common sense: play %character% as not knowing this until they learn it in character.";
+    public static final String SHARED_DISCOVERIES =
+            "&7%amount% Codex entries carried over from your other characters, with their Player EXP.";
 
 
     private Codex plugin;
@@ -61,6 +65,14 @@ public class MessagesConfigManager {
                 config.set("knownInCharacterBy",KNOWN_BY);
                 config.set("knownInCharacterByNobody",KNOWN_BY_NOBODY);
                 config.set("knownOutOfCharacterOnly",OUT_OF_CHARACTER_ONLY);
+                configFile.saveConfig();
+            }
+            if(!text.contains("knownOutOfCharacterOnlyAdvice:")){
+                config.set("knownOutOfCharacterOnlyAdvice",OUT_OF_CHARACTER_ADVICE);
+                configFile.saveConfig();
+            }
+            if(!text.contains("sharedDiscoveries:")){
+                config.set("sharedDiscoveries",SHARED_DISCOVERIES);
                 configFile.saveConfig();
             }
             if(!text.contains("noCharacterInPlay:")){

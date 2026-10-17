@@ -28,6 +28,8 @@ clickActionsCooldown: "&cYou must wait &7%time% &cbefore using this item again."
 knownInCharacterBy: "&7%characters% can use this in character."
 knownInCharacterByNobody: "&7No character can use this in character."
 knownOutOfCharacterOnly: "&8&o%character% knows this only out of character."
+knownOutOfCharacterOnlyAdvice: "&8&oUse common sense: play %character% as not knowing this until they learn it in character."
+sharedDiscoveries: "&7%amount% Codex entries carried over from your other characters, with their Player EXP."
 noCharacterInPlay: "&cChoose a character to open the Codex."
 seconds: s
 minutes: m
