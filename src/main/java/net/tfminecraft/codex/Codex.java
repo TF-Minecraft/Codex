@@ -64,7 +64,7 @@ public class Codex extends JavaPlugin {
         }
 
         characterJournals = new CharacterJournals(playerDataManager, new CharacterStore(getDataFolder().toPath()),
-                new LegacyRecipient(getDataFolder().getParentFile().toPath()), getLogger());
+                new LegacyRecipient(getDataFolder().getParentFile().toPath()), new ExplorationManager(this), getLogger());
         registerEvents();
         registerCommands();
         characterJournals.start();

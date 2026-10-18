@@ -11,6 +11,26 @@ progress_bar_placeholder:
   empty_symbol: "&c|"
   amount: 20
 
+# Exploration belongs to the account. When a character starts playing, it gets the
+# discoveries its account's other characters (alive or dead) and its journal from before
+# characters made, except the categories and category:discovery entries kept per character.
+# Those stay with whoever found them; the others see them out of character.
+# A copied discovery runs only its reward lines starting with a rewards 'from', as 'to'
+# plus the rest of the line (Player EXP goes through RPCharacters, which keeps what a
+# capped class can't take yet). Its other reward lines are skipped.
+shared_discoveries:
+  enabled: true
+  keep_per_character:
+    - research
+    - achievements:5_research
+    - achievements:10_research
+    - achievements:25_research
+    - achievements:all_research
+    - achievements:full_codex
+  rewards:
+    - from: "console_command: mmocore admin exp give %player% main "
+      to: "console_command: rpcharacter admin carryexp %player% "
+
 # Defines if every message/text in the plugin should use the MiniMessage format.
 # Only works on Paper 1.19.4+.
 use_minimessage: false

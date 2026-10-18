@@ -361,6 +361,10 @@ public class InventoryManager {
         if(current == null || !current.hasDiscovery(categoryName,discoveryName)){
             lines.add(messages.getString("knownOutOfCharacterOnly",MessagesConfigManager.OUT_OF_CHARACTER_ONLY)
                     .replace("%character%",knowledge.characterName()));
+            String advice = messages.getString("knownOutOfCharacterOnlyAdvice",MessagesConfigManager.OUT_OF_CHARACTER_ADVICE);
+            if(!advice.isEmpty()){
+                lines.add(advice.replace("%character%",knowledge.characterName()));
+            }
         }
         return lines;
     }

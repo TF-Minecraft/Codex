@@ -6,8 +6,10 @@ Codex gives players a journal of discoveries: places they enter, creatures they
 kill and lore that commands unlock. `/codex` opens the journal, and each entry
 shows its text once it has been found.
 
-Each roleplay character keeps its own journal, so a new character discovers the
-world afresh and earns the discovery rewards again. An entry any of the account's
+Each roleplay character keeps its own journal. Exploration belongs to the account:
+a character gets the discoveries its account's other characters made, with their
+Player EXP, when it starts playing. Research stays with whoever found it, so a new
+character researches afresh and earns those rewards again. An entry any of the account's
 characters has found stays readable for out-of-character reference, and its hover
 text names the living characters who can use it in character. What an account
 found before journals were per character stays readable this way, but no
